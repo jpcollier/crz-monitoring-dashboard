@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://data.ny.gov/api/views/t6yz-b64h.json\")",
+      "Bash(powershell -NoProfile -Command \"\\(Invoke-WebRequest -Uri 'https://data.ny.gov/api/views/t6yz-b64h.json' -UseBasicParsing\\).Content | ConvertFrom-Json | Select-Object -ExpandProperty columns | Format-List -Property name, dataTypeName, description\")",
+      "Bash(python3)",
+      "Bash(pip show *)",
+      "Bash(findstr \"Name\\\\|Version\")",
+      "Bash(pip install *)",
+      "Bash(python -c \"import duckdb, pandas, pyarrow, json, os, sys, datetime, logging; print\\('All imports OK'\\)\")",
+      "Bash(python -m py_compile scripts/build_data.py)",
+      "Bash(python -m py_compile scripts/validate_data.py)",
+      "Bash(python -m py_compile tests/test_validate_bad_fixture.py)",
+      "Bash(python -m pytest tests/test_validate_bad_fixture.py -v)",
+      "Bash(python -c ' *)",
+      "PowerShell(node --version)",
+      "PowerShell(pnpm --version)",
+      "Bash(grep -o 'onlyBuiltDependencies[^\"]*\"[^\"]*\"' \"C:/Program Files/nodejs/node_modules/pnpm/dist/pnpm.mjs\" | head -20)",
+      "Bash(pnpm typecheck *)"
+    ]
+  }
+}

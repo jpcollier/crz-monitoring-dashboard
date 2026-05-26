@@ -1,0 +1,98 @@
+# data-refresh.yml
+# =================
+# Rebuilds the CRZ Parquet files weekly and commits any changes to main.
+# A push to main triggers Vercel's standard git-deploy automatically.
+#
+# Schedule: Mondays at 06:00 US/Eastern.
+#   - 10:00 UTC during EST (UTC-5, Nov–Mar)
+#   - 11:00 UTC during EDT (UTC-4, Mar–Nov)
+#   We schedule both cron entries so the job fires at 06:00 ET regardless
+#   of DST. GitHub Actions cron uses UTC and has no DST awareness.
+#   Both entries may fire in the transition weeks (harmless — idempotent).
+
+name: Data Refresh
+
+on:
+  schedule:
+    # 06:00 ET during EDT (UTC-4): 10:00 UTC — active roughly Mar–Nov
+    - cron: "0 10 * * 1"
+    # 06:00 ET during EST (UTC-5): 11:00 UTC — active roughly Nov–Mar
+    - cron: "0 11 * * 1"
+
+  # Allow manual trigger from the Actions UI or via `gh workflow run`.
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    name: Pull, aggregate, validate, commit
+    runs-on: ubuntu-latest
+
+    # Give the job write access to the repo so it can commit back.
+    permissions:
+      contents: write
+
+    steps:
+      # ----------------------------------------------------------------
+      # 1. Check out the default branch (main).
+      # ----------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          # Fetch full history so the subsequent commit has a proper parent.
+          fetch-depth: 1
+
+      # ----------------------------------------------------------------
+      # 2. Set up Python.
+      # ----------------------------------------------------------------
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      # ----------------------------------------------------------------
+      # 3. Install Python dependencies.
+      # ----------------------------------------------------------------
+      - name: Install Python dependencies
+        run: pip install -r scripts/requirements.txt
+
+      # ----------------------------------------------------------------
+      # 4. Build the Parquet files and metadata.json.
+      #    The script streams ~1 GB CSV from Socrata and writes to
+      #    public/data/.  Expect 3–5 minutes.
+      # ----------------------------------------------------------------
+      - name: Build data artifacts
+        run: python scripts/build_data.py
+
+      # ----------------------------------------------------------------
+      # 5. Validate the build output.
+      #    Exits non-zero on any validation failure, which fails the job.
+      # ----------------------------------------------------------------
+      - name: Validate data artifacts
+        run: python scripts/validate_data.py
+
+      # ----------------------------------------------------------------
+      # 6. Commit changed Parquet/metadata files back to main.
+      #    If nothing changed (byte-identical build), skip the commit so
+      #    we don't create an empty commit or re-trigger a Vercel deploy.
+      # ----------------------------------------------------------------
+      - name: Commit updated data artifacts (if any)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stage only the build artifacts we own.
+          git add public/data/crz_daily.parquet \
+                  public/data/crz_hourly.parquet \
+                  public/data/metadata.json
+
+          # Check whether there is anything to commit.
+          if git diff --cached --quiet; then
+            echo "No changes to data artifacts — skipping commit."
+          else
+            git commit -m "[data] Weekly refresh $(date -u +'%Y-%m-%d')"
+            git push origin main
+            echo "Data artifacts committed and pushed to main."
+          fi

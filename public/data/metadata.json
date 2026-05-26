@@ -1,0 +1,13 @@
+{
+  "last_updated": "2026-05-24T17:53:47.458988+00:00",
+  "source_row_count": 5152896,
+  "daily_row_count": 71568,
+  "hourly_row_count": 1717632,
+  "current_window_start": "2026-01-01",
+  "current_window_end": "2026-05-24",
+  "schema_version": 1,
+  "data_as_of": "2026-05-16",
+  "comparable_period_end": "2026-05-24",
+  "rows_daily": 71568,
+  "rows_hourly": 1717632
+}
