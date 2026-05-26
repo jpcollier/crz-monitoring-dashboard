@@ -56,37 +56,57 @@ const fmtCount = (v: number): string => {
   return String(Math.round(v))
 }
 
-/** Compose the multi-line tip title for a hovered hour. */
-function buildTipTitle(
-  d: HourlyYoYRow,
-  allData: HourlyYoYRow[],
-): string {
-  const sameHour = allData.filter((r) => r.hour === d.hour)
-  const row2025 = sameHour.find((r) => r.year === 2025)
-  const row2026 = sameHour.find((r) => r.year === 2026)
-  const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 0 })
-  const hourLabel = fmtHour(d.hour)
+// ---------------------------------------------------------------------------
+// Hover info — wide-form row keyed on hour
+// ---------------------------------------------------------------------------
 
-  if (row2025 && row2026) {
-    const delta = row2026.avg_entries - row2025.avg_entries
-    const pct = ((delta / row2025.avg_entries) * 100).toFixed(1)
-    const sign = delta >= 0 ? '+' : ''
-    return [
-      hourLabel,
-      `2026: ${fmt(row2026.avg_entries)}`,
-      `2025: ${fmt(row2025.avg_entries)}`,
-      `Δ ${sign}${fmt(delta)} (${sign}${pct}%)`,
-    ].join('\n')
+interface WideHourRow {
+  hour: number
+  avg2026: number | null
+  avg2025: number | null
+}
+
+interface HoverInfo {
+  dateLabel: string
+  val2026: string | null
+  val2025: string | null
+  delta: number | null
+  deltaPct: string | null
+}
+
+function buildHoverInfo(d: WideHourRow): HoverInfo {
+  const dateLabel = fmtHour(d.hour)
+  if (d.avg2026 !== null && d.avg2025 !== null) {
+    const delta = d.avg2026 - d.avg2025
+    return {
+      dateLabel,
+      val2026: fmtCount(Math.round(d.avg2026)),
+      val2025: fmtCount(Math.round(d.avg2025)),
+      delta,
+      deltaPct: ((delta / d.avg2025) * 100).toFixed(1),
+    }
   }
-  if (row2026) return `${hourLabel}\n2026: ${fmt(row2026.avg_entries)}\n(no 2025 data)`
-  if (row2025) return `${hourLabel}\n2025: ${fmt(row2025.avg_entries)}\n(no 2026 data)`
-  return hourLabel
+  return {
+    dateLabel,
+    val2026: d.avg2026 !== null ? fmtCount(Math.round(d.avg2026)) : null,
+    val2025: d.avg2025 !== null ? fmtCount(Math.round(d.avg2025)) : null,
+    delta: null,
+    deltaPct: null,
+  }
 }
 
 /** Build and return a Plot SVG element. Caller owns appendChild / remove. */
 function buildPlot(width: number, data: HourlyYoYRow[]) {
   const data2025 = data.filter((d) => d.year === 2025)
   const data2026 = data.filter((d) => d.year === 2026)
+
+  const lookup2025 = new Map(data2025.map((r) => [r.hour, r.avg_entries]))
+  const lookup2026 = new Map(data2026.map((r) => [r.hour, r.avg_entries]))
+  const wide: WideHourRow[] = Array.from({ length: 24 }, (_, h) => ({
+    hour: h,
+    avg2026: lookup2026.get(h) ?? null,
+    avg2025: lookup2025.get(h) ?? null,
+  }))
 
   const lastOf = (arr: HourlyYoYRow[]) => {
     const atHour23 = arr.filter((d) => d.hour === 23)
@@ -157,15 +177,9 @@ function buildPlot(width: number, data: HourlyYoYRow[]) {
           fontWeight: 600,
         }),
       ),
-      // Crosshair tip: shows both years' avg values + delta on hover
-      Plot.tip(
-        data,
-        Plot.pointerX({
-          x: 'hour',
-          y: 'avg_entries',
-          title: (d) => buildTipTitle(d, data),
-        }),
-      ),
+      Plot.ruleX(wide, Plot.pointerX({ x: 'hour', stroke: '#9ca3af', strokeWidth: 1 })),
+      Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.avg2025, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 4 })),
+      Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.avg2026, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 5 })),
     ],
   })
 }
@@ -188,6 +202,7 @@ export function HourlyProfileChart({ data, summary, isLoading, error }: HourlyPr
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number>(0)
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
 
   // Track container width via ResizeObserver so the plot fills its column.
   useEffect(() => {
@@ -215,8 +230,15 @@ export function HourlyProfileChart({ data, summary, isLoading, error }: HourlyPr
     const plot = buildPlot(containerWidth, data)
     plotEl.appendChild(plot)
 
+    const handleInput = () => {
+      const datum = plot.value as WideHourRow | null
+      setHoverInfo(datum ? buildHoverInfo(datum) : null)
+    }
+    plot.addEventListener('input', handleInput)
+
     return () => {
       plot.remove()
+      setHoverInfo(null)
     }
   }, [data, containerWidth, isLoading, error])
 
@@ -260,6 +282,25 @@ export function HourlyProfileChart({ data, summary, isLoading, error }: HourlyPr
             </div>
           )}
           <div ref={plotRef} />
+          <div className="h-5 flex items-center gap-2 text-xs text-gray-500 px-1 select-none">
+            {hoverInfo && (
+              <>
+                <span className="font-medium text-gray-700">{hoverInfo.dateLabel}</span>
+                <span className="text-gray-300" aria-hidden="true">·</span>
+                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.val2026 ?? '—'}</span>
+                <span className="text-gray-300" aria-hidden="true">·</span>
+                <span><span className="text-gray-400">2025</span>: {hoverInfo.val2025 ?? '—'}</span>
+                {hoverInfo.delta !== null && (
+                  <>
+                    <span className="text-gray-300" aria-hidden="true">·</span>
+                    <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+                      {`Δ ${hoverInfo.delta >= 0 ? '+' : ''}${fmtCount(hoverInfo.delta)} (${hoverInfo.delta >= 0 ? '+' : ''}${hoverInfo.deltaPct}%)`}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

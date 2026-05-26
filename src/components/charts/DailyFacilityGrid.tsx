@@ -104,6 +104,18 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
           strokeWidth: (d: { year: number }) => (d.year === 2026 ? 2 : 1),
           curve: 'monotone-x',
         }),
+        ...(() => {
+          const lookup25 = new Map(parsed.filter(r => r.year === 2025).map(r => [r.date.getTime(), r.entries]))
+          const wide = parsed.filter(r => r.year === 2026).map(r => ({
+            date: r.date, plot_date: r.plot_date,
+            e26: r.entries, e25: lookup25.get(r.date.getTime()) ?? null,
+          }))
+          return [
+            Plot.ruleX(wide, Plot.pointerX({ x: 'date', stroke: '#9ca3af', strokeWidth: 1 })),
+            Plot.dot(wide, Plot.pointerX({ x: 'date', y: (d) => d.e25, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 3 })),
+            Plot.dot(wide, Plot.pointerX({ x: 'date', y: (d) => d.e26, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 3.5 })),
+          ]
+        })(),
       ],
     })
 

@@ -64,31 +64,44 @@ function parseRows(data: DailyYoYRow[]) {
   return data.map((d) => ({ ...d, date: new Date(d.plot_date) }))
 }
 
-/** Compose the multi-line tip title for a hovered row. */
-function buildTipTitle(
-  d: { date: Date; year: number; entries: number; plot_date: string },
-  allParsed: ReturnType<typeof parseRows>,
-): string {
-  const sameDate = allParsed.filter((r) => r.plot_date === d.plot_date)
-  const row2025 = sameDate.find((r) => r.year === 2025)
-  const row2026 = sameDate.find((r) => r.year === 2026)
-  const fmt = (v: number) => v.toLocaleString()
-  const dateLabel = d.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+// ---------------------------------------------------------------------------
+// Hover info — wide-form row keyed on 2026 dates
+// ---------------------------------------------------------------------------
 
-  if (row2025 && row2026) {
-    const delta = row2026.entries - row2025.entries
-    const pct = ((delta / row2025.entries) * 100).toFixed(1)
-    const sign = delta >= 0 ? '+' : ''
-    return [
+interface WideRow {
+  date: Date
+  plot_date: string
+  entries2026: number | null
+  entries2025: number | null
+}
+
+interface HoverInfo {
+  dateLabel: string
+  val2026: string | null
+  val2025: string | null
+  delta: number | null
+  deltaPct: string | null
+}
+
+function buildHoverInfo(d: WideRow): HoverInfo {
+  const dateLabel = d.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (d.entries2026 !== null && d.entries2025 !== null) {
+    const delta = d.entries2026 - d.entries2025
+    return {
       dateLabel,
-      `2026: ${fmt(row2026.entries)}`,
-      `2025: ${fmt(row2025.entries)}`,
-      `Δ ${sign}${fmt(delta)} (${sign}${pct}%)`,
-    ].join('\n')
+      val2026: fmtCount(d.entries2026),
+      val2025: fmtCount(d.entries2025),
+      delta,
+      deltaPct: ((delta / d.entries2025) * 100).toFixed(1),
+    }
   }
-  if (row2026) return `${dateLabel}\n2026: ${fmt(row2026.entries)}\n(no 2025 data)`
-  if (row2025) return `${dateLabel}\n2025: ${fmt(row2025.entries)}\n(no 2026 data)`
-  return dateLabel
+  return {
+    dateLabel,
+    val2026: d.entries2026 !== null ? fmtCount(d.entries2026) : null,
+    val2025: d.entries2025 !== null ? fmtCount(d.entries2025) : null,
+    delta: null,
+    deltaPct: null,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +124,17 @@ function xAxisForSpan(spanDays: number) {
 function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
   const data2025 = parsed.filter((d) => d.year === 2025)
   const data2026 = parsed.filter((d) => d.year === 2026)
+
+  // Wide-form dataset keyed on 2026 dates so all pointer marks snap to the
+  // same x. Using 2026 as the anchor means the rule and both dots are always
+  // driven by identical x values, eliminating the independent-snap off-by-one.
+  const lookup2025 = new Map(data2025.map((r) => [r.date.getTime(), r.entries]))
+  const wide: WideRow[] = data2026.map((r) => ({
+    date: r.date,
+    plot_date: r.plot_date,
+    entries2026: r.entries,
+    entries2025: lookup2025.get(r.date.getTime()) ?? null,
+  }))
 
   const lastOf = (arr: typeof data2025) =>
     arr.length ? [arr.reduce((a, b) => (a.date >= b.date ? a : b))] : []
@@ -183,15 +207,11 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
           fontWeight: 600,
         }),
       ),
-      // Crosshair tip: shows both years' values + delta on hover
-      Plot.tip(
-        parsed,
-        Plot.pointerX({
-          x: 'date',
-          y: 'entries',
-          title: (d) => buildTipTitle(d, parsed),
-        }),
-      ),
+      // Vertical rule + dots driven by the same wide dataset so they always
+      // snap to the same x position (all three share one pointerX context).
+      Plot.ruleX(wide, Plot.pointerX({ x: 'date', stroke: '#9ca3af', strokeWidth: 1 })),
+      Plot.dot(wide, Plot.pointerX({ x: 'date', y: (d) => d.entries2025, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 4 })),
+      Plot.dot(wide, Plot.pointerX({ x: 'date', y: (d) => d.entries2026, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 5 })),
     ],
   })
 }
@@ -214,6 +234,7 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
   const containerRef = useRef<HTMLDivElement>(null)
   const plotRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number>(0)
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
 
   // Track container width via ResizeObserver so the plot fills its column.
   useEffect(() => {
@@ -242,8 +263,15 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
     const plot = buildPlot(containerWidth, parsed)
     plotEl.appendChild(plot)
 
+    const handleInput = () => {
+      const datum = plot.value as WideRow | null
+      setHoverInfo(datum ? buildHoverInfo(datum) : null)
+    }
+    plot.addEventListener('input', handleInput)
+
     return () => {
       plot.remove()
+      setHoverInfo(null)
     }
   }, [data, containerWidth, isLoading, error])
 
@@ -293,6 +321,25 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
             </div>
           )}
           <div ref={plotRef} />
+          <div className="h-5 flex items-center gap-2 text-xs text-gray-500 px-1 select-none">
+            {hoverInfo && (
+              <>
+                <span className="font-medium text-gray-700">{hoverInfo.dateLabel}</span>
+                <span className="text-gray-300" aria-hidden="true">·</span>
+                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.val2026 ?? '—'}</span>
+                <span className="text-gray-300" aria-hidden="true">·</span>
+                <span><span className="text-gray-400">2025</span>: {hoverInfo.val2025 ?? '—'}</span>
+                {hoverInfo.delta !== null && (
+                  <>
+                    <span className="text-gray-300" aria-hidden="true">·</span>
+                    <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+                      {`Δ ${hoverInfo.delta >= 0 ? '+' : ''}${fmtCount(hoverInfo.delta)} (${hoverInfo.delta >= 0 ? '+' : ''}${hoverInfo.deltaPct}%)`}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
+          </div>
           {hasOrphan2026 && (
             <p className="mt-1 text-[11px] text-gray-400 leading-snug">
               Note: prior-year data unavailable for Jan 1–4 (CRZ launched Jan 5, 2025).

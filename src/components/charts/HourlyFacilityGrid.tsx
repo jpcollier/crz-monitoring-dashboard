@@ -103,6 +103,18 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
           strokeWidth: (d: HourlyGroupRow) => (d.year === 2026 ? 2 : 1),
           curve: 'monotone-x',
         }),
+        ...(() => {
+          const lookup25 = new Map(rows.filter(r => r.year === 2025).map(r => [r.hour, r.avg_entries]))
+          const lookup26 = new Map(rows.filter(r => r.year === 2026).map(r => [r.hour, r.avg_entries]))
+          const wide = Array.from({ length: 24 }, (_, h) => ({
+            hour: h, e26: lookup26.get(h) ?? null, e25: lookup25.get(h) ?? null,
+          }))
+          return [
+            Plot.ruleX(wide, Plot.pointerX({ x: 'hour', stroke: '#9ca3af', strokeWidth: 1 })),
+            Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.e25, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 3 })),
+            Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.e26, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 3.5 })),
+          ]
+        })(),
       ],
     })
 
