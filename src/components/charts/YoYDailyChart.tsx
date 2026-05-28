@@ -2,6 +2,16 @@ import * as Plot from '@observablehq/plot'
 import { useEffect, useRef, useState } from 'react'
 import type { DailyYoYRow } from '../../lib/queries'
 import ChangeBadge from '../ChangeBadge'
+import {
+  COLOR_2025,
+  COLOR_2026,
+  buildDailyHoverRows,
+  chartHoverMarks,
+  fmtCount,
+  formatHoverReadout,
+  type DailyHoverRow,
+  type HoverReadout as HoverInfo,
+} from './chartHover'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -45,15 +55,6 @@ export interface YoYDailyChartProps {
 // ---------------------------------------------------------------------------
 
 const CHART_HEIGHT = 280
-const COLOR_2025 = '#d1d5db' // gray-300  — prior year, intentionally recedes
-const COLOR_2026 = '#3b82f6' // blue-500  — current year, brand accent
-
-/** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
-const fmtCount = (v: number): string => {
-  if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
-  if (v >= 1_000)     return `${Math.round(v / 1_000)}K`
-  return String(Math.round(v))
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,46 +63,6 @@ const fmtCount = (v: number): string => {
 /** Build an annotated row list with Date objects parsed from plot_date strings. */
 function parseRows(data: DailyYoYRow[]) {
   return data.map((d) => ({ ...d, date: new Date(d.plot_date) }))
-}
-
-// ---------------------------------------------------------------------------
-// Hover info — wide-form row keyed on 2026 dates
-// ---------------------------------------------------------------------------
-
-interface WideRow {
-  date: Date
-  plot_date: string
-  entries2026: number | null
-  entries2025: number | null
-}
-
-interface HoverInfo {
-  dateLabel: string
-  val2026: string | null
-  val2025: string | null
-  delta: number | null
-  deltaPct: string | null
-}
-
-function buildHoverInfo(d: WideRow): HoverInfo {
-  const dateLabel = d.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  if (d.entries2026 !== null && d.entries2025 !== null) {
-    const delta = d.entries2026 - d.entries2025
-    return {
-      dateLabel,
-      val2026: fmtCount(d.entries2026),
-      val2025: fmtCount(d.entries2025),
-      delta,
-      deltaPct: ((delta / d.entries2025) * 100).toFixed(1),
-    }
-  }
-  return {
-    dateLabel,
-    val2026: d.entries2026 !== null ? fmtCount(d.entries2026) : null,
-    val2025: d.entries2025 !== null ? fmtCount(d.entries2025) : null,
-    delta: null,
-    deltaPct: null,
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -128,13 +89,7 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
   // Wide-form dataset keyed on 2026 dates so all pointer marks snap to the
   // same x. Using 2026 as the anchor means the rule and both dots are always
   // driven by identical x values, eliminating the independent-snap off-by-one.
-  const lookup2025 = new Map(data2025.map((r) => [r.date.getTime(), r.entries]))
-  const wide: WideRow[] = data2026.map((r) => ({
-    date: r.date,
-    plot_date: r.plot_date,
-    entries2026: r.entries,
-    entries2025: lookup2025.get(r.date.getTime()) ?? null,
-  }))
+  const wide = buildDailyHoverRows(parsed, (r) => r.entries)
 
   const lastOf = (arr: typeof data2025) =>
     arr.length ? [arr.reduce((a, b) => (a.date >= b.date ? a : b))] : []
@@ -207,11 +162,9 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
           fontWeight: 600,
         }),
       ),
-      // Vertical rule + dots driven by the same wide dataset so they always
-      // snap to the same x position (all three share one pointerX context).
-      Plot.ruleX(wide, Plot.pointerX({ x: 'date', stroke: '#9ca3af', strokeWidth: 1 })),
-      Plot.dot(wide, Plot.pointerX({ x: 'date', y: (d) => d.entries2025, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 4 })),
-      Plot.dot(wide, Plot.pointerX({ x: 'date', y: (d) => d.entries2026, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 5 })),
+      // Vertical rule + dots driven by one shared hover utility so all marks
+      // snap to the same x position and follow the same year-color convention.
+      ...chartHoverMarks(wide, 'date'),
     ],
   })
 }
@@ -264,8 +217,8 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
     plotEl.appendChild(plot)
 
     const handleInput = () => {
-      const datum = plot.value as WideRow | null
-      setHoverInfo(datum ? buildHoverInfo(datum) : null)
+      const datum = plot.value as DailyHoverRow | null
+      setHoverInfo(datum ? formatHoverReadout(datum) : null)
     }
     plot.addEventListener('input', handleInput)
 
@@ -324,16 +277,16 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
           <div className="h-5 flex items-center gap-2 text-xs text-gray-500 px-1 select-none">
             {hoverInfo && (
               <>
-                <span className="font-medium text-gray-700">{hoverInfo.dateLabel}</span>
+                <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
                 <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.val2026 ?? '—'}</span>
+                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
                 <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-gray-400">2025</span>: {hoverInfo.val2025 ?? '—'}</span>
+                <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
                 {hoverInfo.delta !== null && (
                   <>
                     <span className="text-gray-300" aria-hidden="true">·</span>
                     <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
-                      {`Δ ${hoverInfo.delta >= 0 ? '+' : ''}${fmtCount(hoverInfo.delta)} (${hoverInfo.delta >= 0 ? '+' : ''}${hoverInfo.deltaPct}%)`}
+                      {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
                     </span>
                   </>
                 )}

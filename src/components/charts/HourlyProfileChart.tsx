@@ -3,6 +3,17 @@ import { useEffect, useRef, useState } from 'react'
 import type { HourlyYoYRow } from '../../lib/queries'
 import ChangeBadge from '../ChangeBadge'
 import type { SystemwideSummary } from './YoYDailyChart'
+import {
+  COLOR_2025,
+  COLOR_2026,
+  buildHourlyHoverRows,
+  chartHoverMarks,
+  fmtCount,
+  fmtHour,
+  formatHoverReadout,
+  type HourlyHoverRow,
+  type HoverReadout as HoverInfo,
+} from './chartHover'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -34,79 +45,14 @@ export interface HourlyProfileChartProps {
 // Constants
 // ---------------------------------------------------------------------------
 
-const COLOR_2025 = '#d1d5db' // gray-300  — prior year, intentionally recedes
-const COLOR_2026 = '#3b82f6' // blue-500  — current year, brand accent
 const CHART_HEIGHT = 280
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Format an hour integer (0–23) as a short AM/PM label. */
-function fmtHour(h: number): string {
-  if (h === 0) return '12a'
-  if (h === 12) return '12p'
-  return h < 12 ? `${h}a` : `${h - 12}p`
-}
-
-/** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
-const fmtCount = (v: number): string => {
-  if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
-  if (v >= 1_000)     return `${Math.round(v / 1_000)}K`
-  return String(Math.round(v))
-}
-
-// ---------------------------------------------------------------------------
-// Hover info — wide-form row keyed on hour
-// ---------------------------------------------------------------------------
-
-interface WideHourRow {
-  hour: number
-  avg2026: number | null
-  avg2025: number | null
-}
-
-interface HoverInfo {
-  dateLabel: string
-  val2026: string | null
-  val2025: string | null
-  delta: number | null
-  deltaPct: string | null
-}
-
-function buildHoverInfo(d: WideHourRow): HoverInfo {
-  const dateLabel = fmtHour(d.hour)
-  if (d.avg2026 !== null && d.avg2025 !== null) {
-    const delta = d.avg2026 - d.avg2025
-    return {
-      dateLabel,
-      val2026: fmtCount(Math.round(d.avg2026)),
-      val2025: fmtCount(Math.round(d.avg2025)),
-      delta,
-      deltaPct: ((delta / d.avg2025) * 100).toFixed(1),
-    }
-  }
-  return {
-    dateLabel,
-    val2026: d.avg2026 !== null ? fmtCount(Math.round(d.avg2026)) : null,
-    val2025: d.avg2025 !== null ? fmtCount(Math.round(d.avg2025)) : null,
-    delta: null,
-    deltaPct: null,
-  }
-}
 
 /** Build and return a Plot SVG element. Caller owns appendChild / remove. */
 function buildPlot(width: number, data: HourlyYoYRow[]) {
   const data2025 = data.filter((d) => d.year === 2025)
   const data2026 = data.filter((d) => d.year === 2026)
 
-  const lookup2025 = new Map(data2025.map((r) => [r.hour, r.avg_entries]))
-  const lookup2026 = new Map(data2026.map((r) => [r.hour, r.avg_entries]))
-  const wide: WideHourRow[] = Array.from({ length: 24 }, (_, h) => ({
-    hour: h,
-    avg2026: lookup2026.get(h) ?? null,
-    avg2025: lookup2025.get(h) ?? null,
-  }))
+  const wide = buildHourlyHoverRows(data, (r) => r.avg_entries)
 
   const lastOf = (arr: HourlyYoYRow[]) => {
     const atHour23 = arr.filter((d) => d.hour === 23)
@@ -177,9 +123,7 @@ function buildPlot(width: number, data: HourlyYoYRow[]) {
           fontWeight: 600,
         }),
       ),
-      Plot.ruleX(wide, Plot.pointerX({ x: 'hour', stroke: '#9ca3af', strokeWidth: 1 })),
-      Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.avg2025, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 4 })),
-      Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.avg2026, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 5 })),
+      ...chartHoverMarks(wide, 'hour'),
     ],
   })
 }
@@ -231,8 +175,8 @@ export function HourlyProfileChart({ data, summary, isLoading, error }: HourlyPr
     plotEl.appendChild(plot)
 
     const handleInput = () => {
-      const datum = plot.value as WideHourRow | null
-      setHoverInfo(datum ? buildHoverInfo(datum) : null)
+      const datum = plot.value as HourlyHoverRow | null
+      setHoverInfo(datum ? formatHoverReadout(datum, { valueFormatter: (value) => fmtCount(Math.round(value)) }) : null)
     }
     plot.addEventListener('input', handleInput)
 
@@ -285,16 +229,16 @@ export function HourlyProfileChart({ data, summary, isLoading, error }: HourlyPr
           <div className="h-5 flex items-center gap-2 text-xs text-gray-500 px-1 select-none">
             {hoverInfo && (
               <>
-                <span className="font-medium text-gray-700">{hoverInfo.dateLabel}</span>
+                <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
                 <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.val2026 ?? '—'}</span>
+                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
                 <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-gray-400">2025</span>: {hoverInfo.val2025 ?? '—'}</span>
+                <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
                 {hoverInfo.delta !== null && (
                   <>
                     <span className="text-gray-300" aria-hidden="true">·</span>
                     <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
-                      {`Δ ${hoverInfo.delta >= 0 ? '+' : ''}${fmtCount(hoverInfo.delta)} (${hoverInfo.delta >= 0 ? '+' : ''}${hoverInfo.deltaPct}%)`}
+                      {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
                     </span>
                   </>
                 )}
