@@ -1,7 +1,17 @@
 import * as Plot from '@observablehq/plot'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ChangeBadge from '../ChangeBadge'
 import type { DailyClassTimeRow, ClassAggRow, HourlyClassRow } from '../../lib/queries'
+import {
+  COLOR_2025,
+  COLOR_2026,
+  chartHoverMarks,
+  fmtCount,
+  fmtHour,
+  formatHoverReadout,
+  type ChartHoverRow,
+  type HoverReadout,
+} from './chartHover'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -31,32 +41,91 @@ export interface ClassBreakdownDrawerProps {
 }
 
 // ---------------------------------------------------------------------------
-// Color constants — 2025 gray, 2026 blue (matches DailyFacilityGrid)
-// ---------------------------------------------------------------------------
-
-const COLOR_2025 = '#d1d5db' // gray-300  — prior year, intentionally recedes
-const COLOR_2026 = '#3b82f6' // blue-500  — current year, brand accent
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function fmtHour(h: number): string {
-  if (h === 0) return '12a'
-  if (h === 12) return '12p'
-  return h < 12 ? `${h}a` : `${h - 12}p`
-}
-
-/** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
-const fmtCount = (v: number): string => {
-  if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
-  if (v >= 1_000)     return `${Math.round(v / 1_000)}K`
-  return String(Math.round(v))
-}
-
-// ---------------------------------------------------------------------------
 // Single vehicle-class card — renders daily time-series or hourly profile
 // ---------------------------------------------------------------------------
+
+
+interface ParsedDailyClassTimeRow extends DailyClassTimeRow {
+  date: Date
+}
+
+type ClassDailyHoverRow = ChartHoverRow & {
+  date: Date
+  plot_date: string
+  entries2026: number | null
+  entries2025: number | null
+  value2026: number | null
+  value2025: number | null
+}
+
+type ClassHourlyHoverRow = ChartHoverRow & {
+  hour: number
+  avg2026: number | null
+  avg2025: number | null
+  value2026: number | null
+  value2025: number | null
+}
+
+function buildClassDailyHoverRows(
+  rows2026: ParsedDailyClassTimeRow[],
+  rows2025: ParsedDailyClassTimeRow[],
+): ClassDailyHoverRow[] {
+  const entries2025ByPlotDate = new Map(rows2025.map((row) => [row.plot_date, row.entries]))
+
+  return rows2026.map((row) => {
+    const entries2025 = entries2025ByPlotDate.get(row.plot_date) ?? null
+
+    return {
+      date: row.date,
+      plot_date: row.plot_date,
+      entries2026: row.entries,
+      entries2025,
+      value2026: row.entries,
+      value2025: entries2025,
+    }
+  })
+}
+
+function buildClassHourlyHoverRows(
+  rows2026: HourlyClassRow[],
+  rows2025: HourlyClassRow[],
+): ClassHourlyHoverRow[] {
+  const avg2026ByHour = new Map(rows2026.map((row) => [row.hour, row.avg_entries]))
+  const avg2025ByHour = new Map(rows2025.map((row) => [row.hour, row.avg_entries]))
+
+  return Array.from({ length: 24 }, (_, hour) => {
+    const avg2026 = avg2026ByHour.get(hour) ?? null
+    const avg2025 = avg2025ByHour.get(hour) ?? null
+
+    return {
+      hour,
+      avg2026,
+      avg2025,
+      value2026: avg2026,
+      value2025: avg2025,
+    }
+  })
+}
+
+function ClassHoverReadout({ hoverInfo }: { hoverInfo: HoverReadout }) {
+  return (
+    <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-tight text-gray-500 select-none">
+      <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
+      <span className="text-gray-300" aria-hidden="true">·</span>
+      <span><span className="font-medium text-blue-500">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
+      <span className="text-gray-300" aria-hidden="true">·</span>
+      <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
+      {hoverInfo.delta !== null && (
+        <>
+          <span className="text-gray-300" aria-hidden="true">·</span>
+          <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+            {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
 
 interface ClassCardProps {
   vehicleClass: string
@@ -67,6 +136,7 @@ interface ClassCardProps {
 
 function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
   const chartRef = useRef<HTMLDivElement>(null)
+  const [hoverInfo, setHoverInfo] = useState<HoverReadout | null>(null)
 
   useEffect(() => {
     if (!chartRef.current) return
@@ -92,6 +162,9 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
     if (mode === 'daily') {
       const dailyRows = rows as DailyClassTimeRow[]
       const parsed = dailyRows.map(r => ({ ...r, date: new Date(r.plot_date) }))
+      const rows2026 = parsed.filter((row) => row.year === 2026)
+      const rows2025 = parsed.filter((row) => row.year === 2025)
+      const wideRows = buildClassDailyHoverRows(rows2026, rows2025)
       const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
       const fmtMD = (d: Date) => `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`
       const fmtM  = (d: Date) => MONTHS_SHORT[d.getUTCMonth()]
@@ -103,17 +176,28 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
         ...commonOpts,
         x: { type: 'utc', ticks: xTicks, tickFormat: xTickFormat, label: null },
         marks: [
-          Plot.lineY(parsed, {
+          Plot.lineY(rows2025, {
             x: 'date',
             y: 'entries',
-            stroke: 'year',
-            strokeWidth: (d: { year: number }) => (d.year === 2026 ? 2 : 1),
+            stroke: COLOR_2025,
+            strokeWidth: 1,
             curve: 'monotone-x',
           }),
+          Plot.lineY(rows2026, {
+            x: 'date',
+            y: 'entries',
+            stroke: COLOR_2026,
+            strokeWidth: 2,
+            curve: 'monotone-x',
+          }),
+          ...chartHoverMarks(wideRows, 'date', { r2025: 3, r2026: 3.5 }),
         ],
       })
     } else {
       const hourlyRows = rows as HourlyClassRow[]
+      const rows2026 = hourlyRows.filter((row) => row.year === 2026)
+      const rows2025 = hourlyRows.filter((row) => row.year === 2025)
+      const wideRows = buildClassHourlyHoverRows(rows2026, rows2025)
       plot = Plot.plot({
         ...commonOpts,
         x: {
@@ -124,19 +208,43 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
           label: null,
         },
         marks: [
-          Plot.lineY(hourlyRows, {
+          Plot.lineY(rows2025, {
             x: 'hour',
             y: 'avg_entries',
-            stroke: 'year',
-            strokeWidth: (d: { year: number }) => (d.year === 2026 ? 2 : 1),
+            stroke: COLOR_2025,
+            strokeWidth: 1,
             curve: 'monotone-x',
           }),
+          Plot.lineY(rows2026, {
+            x: 'hour',
+            y: 'avg_entries',
+            stroke: COLOR_2026,
+            strokeWidth: 2,
+            curve: 'monotone-x',
+          }),
+          ...chartHoverMarks(wideRows, 'hour', { r2025: 3, r2026: 3.5 }),
         ],
       })
     }
 
     chartRef.current.appendChild(plot)
-    return () => { plot.remove() }
+
+    const handleInput = () => {
+      const datum = plot.value as ChartHoverRow | null
+      setHoverInfo(
+        datum
+          ? formatHoverReadout(datum, {
+              valueFormatter: mode === 'hourly' ? (value) => fmtCount(Math.round(value)) : fmtCount,
+            })
+          : null,
+      )
+    }
+    plot.addEventListener('input', handleInput)
+
+    return () => {
+      plot.remove()
+      setHoverInfo(null)
+    }
   }, [rows, mode])
 
   const has2026 = rows.some(r => r.year === 2026)
@@ -160,6 +268,7 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
       ) : (
         <>
           <div ref={chartRef} className="w-full" />
+          {hoverInfo && <ClassHoverReadout hoverInfo={hoverInfo} />}
           {has2026 && !has2025 && (
             <p className="mt-1 text-[10px] text-gray-400 leading-tight">
               No prior-year data for this period
