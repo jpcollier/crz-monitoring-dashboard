@@ -36,20 +36,20 @@ export default function HourlyProfilesView() {
   // Stable dependency keys so useDuckQuery re-fetches exactly when filters change.
   const cs = toISODate(period.current[0])
   const ce = toISODate(period.current[1])
-  const { entryType } = state
-  const periodDeps = [cs, ce, entryType] as const
+  const { dayType, entryType } = state
+  const periodDeps = [cs, ce, entryType, dayType] as const
 
   // -------------------------------------------------------------------------
   // Systemwide hourly profile chart
   // -------------------------------------------------------------------------
   const { data: hourlyData, isLoading: hourlyLoading, error: hourlyError } = useDuckQuery(
-    () => queryHourlyYoY(period, entryType),
+    () => queryHourlyYoY(period, entryType, dayType),
     periodDeps,
   )
 
   // Reuse the daily summary for the ChangeBadge — same aggregate totals.
   const { data: summaryRows } = useDuckQuery(
-    () => querySystemwideSummary(period, entryType),
+    () => querySystemwideSummary(period, entryType, dayType),
     periodDeps,
   )
   const summary: SystemwideSummary | null = summaryRows.length
@@ -60,25 +60,25 @@ export default function HourlyProfilesView() {
   // Facility grid
   // -------------------------------------------------------------------------
   const { data: groupTimeData, isLoading: groupLoading, error: groupError } = useDuckQuery(
-    () => queryHourlyByGroup(period, entryType),
+    () => queryHourlyByGroup(period, entryType, dayType),
     periodDeps,
   )
 
   // Reuse daily group summaries for the per-card ChangeBadges.
   const { data: groupAggData } = useDuckQuery(
-    () => queryGroupSummary(period, entryType),
+    () => queryGroupSummary(period, entryType, dayType),
     periodDeps,
   )
 
   // -------------------------------------------------------------------------
   // Class breakdown drawer — only fetches when a group is selected
   // -------------------------------------------------------------------------
-  const drawerDeps = [selectedGroup, cs, ce, entryType] as const
+  const drawerDeps = [selectedGroup, cs, ce, entryType, dayType] as const
 
   const { data: classTimeData, isLoading: classLoading, error: classError } = useDuckQuery(
     () =>
       selectedGroup
-        ? queryHourlyByClass(selectedGroup, period, entryType)
+        ? queryHourlyByClass(selectedGroup, period, entryType, dayType)
         : Promise.resolve([]),
     drawerDeps,
   )
@@ -86,14 +86,14 @@ export default function HourlyProfilesView() {
   const { data: classAggData } = useDuckQuery(
     () =>
       selectedGroup
-        ? queryClassSummary(selectedGroup, period, entryType)
+        ? queryClassSummary(selectedGroup, period, entryType, dayType)
         : Promise.resolve([]),
     drawerDeps,
   )
 
   return (
     <div>
-      <FilterBar />
+      <FilterBar showDayType />
 
       <div className="mt-8 space-y-10">
         <section>
