@@ -1,5 +1,5 @@
 import { useUrlState } from '../hooks/useUrlState'
-import type { EntryType, PeriodPreset } from '../lib/types'
+import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
 const PRESETS: { value: PeriodPreset; label: string }[] = [
   { value: 'ytd',        label: 'Year to date' },
@@ -12,6 +12,12 @@ const ENTRY_TYPES: { value: EntryType; label: string }[] = [
   { value: 'CRZ',      label: 'CRZ' },
   { value: 'Excluded', label: 'Excluded' },
   { value: 'Combined', label: 'Combined' },
+]
+
+const DAY_TYPES: { value: DayType; label: string }[] = [
+  { value: 'all',     label: 'All days' },
+  { value: 'weekday', label: 'Weekday' },
+  { value: 'weekend', label: 'Weekend' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -63,7 +69,7 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
 // FilterBar
 // ---------------------------------------------------------------------------
 
-export default function FilterBar() {
+export default function FilterBar({ showDayType = false }: { showDayType?: boolean }) {
   const [state, setState] = useUrlState()
 
   return (
@@ -104,6 +110,23 @@ export default function FilterBar() {
               />
             </div>
           </div>
+        )}
+
+        {showDayType && (
+          <>
+            {/* Vertical divider before the day type filter */}
+            <div className="hidden sm:block self-stretch w-px bg-gray-100" />
+
+            {/* Day type */}
+            <div className="flex flex-col gap-2">
+              <FilterLabel>Day type</FilterLabel>
+              <SegmentedControl
+                options={DAY_TYPES}
+                value={state.dayType}
+                onChange={(dayType) => setState({ dayType })}
+              />
+            </div>
+          </>
         )}
 
         {/* Vertical divider between the two groups */}

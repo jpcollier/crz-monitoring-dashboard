@@ -2,9 +2,12 @@ export type EntryType = 'CRZ' | 'Excluded' | 'Combined'
 
 export type PeriodPreset = 'ytd' | 'last_month' | 'last_week' | 'custom'
 
+export type DayType = 'all' | 'weekday' | 'weekend'
+
 export interface FilterState {
   preset: PeriodPreset
   entryType: EntryType
+  dayType: DayType
   customStart?: string // ISO date string, only when preset === 'custom'
   customEnd?: string
 }

@@ -1,7 +1,7 @@
 import type { ComparablePeriod } from './alignment'
 import { toISODate } from './alignment'
 import { query } from './duckdb'
-import type { EntryType } from './types'
+import type { DayType, EntryType } from './types'
 
 // Returns a WHERE clause fragment for entry_type.
 // 'Combined' means both CRZ and Excluded — no filter needed.
@@ -16,6 +16,14 @@ function periodWhere(period: ComparablePeriod): string {
   const [cs, ce] = period.current.map(toISODate)
   const [ps, pe] = period.prior.map(toISODate)
   return `(date BETWEEN '${cs}' AND '${ce}') OR (date BETWEEN '${ps}' AND '${pe}')`
+}
+
+// Optional hourly-profile day filter. DuckDB strftime('%w') returns 0 for
+// Sunday through 6 for Saturday, so weekdays are Monday-Friday.
+function dayTypeClause(dayType: DayType = 'all'): string {
+  if (dayType === 'weekday') return `AND strftime(date, '%w') BETWEEN '1' AND '5'`
+  if (dayType === 'weekend') return `AND strftime(date, '%w') IN ('0', '6')`
+  return ''
 }
 
 // Converts a 2025-era date to the equivalent 2026-era plot date (adds 364 days).
@@ -110,6 +118,7 @@ export async function queryDailyYoY(
 export async function querySystemwideSummary(
   period: ComparablePeriod,
   entryType: EntryType,
+  dayType: DayType = 'all',
 ): Promise<{ current_entries: number; prior_entries: number; pct_change: number }[]> {
   const [cs, ce] = period.current.map(toISODate)
   const [ps, pe] = period.prior.map(toISODate)
@@ -129,6 +138,7 @@ export async function querySystemwideSummary(
     FROM daily
     WHERE (${periodWhere(period)})
     ${etClause(entryType)}
+    ${dayTypeClause(dayType)}
   `)
 }
 
@@ -155,6 +165,7 @@ export async function queryDailyByGroup(
 export async function queryGroupSummary(
   period: ComparablePeriod,
   entryType: EntryType,
+  dayType: DayType = 'all',
 ): Promise<GroupAggRow[]> {
   const [cs, ce] = period.current.map(toISODate)
   const [ps, pe] = period.prior.map(toISODate)
@@ -175,6 +186,7 @@ export async function queryGroupSummary(
     FROM daily
     WHERE (${periodWhere(period)})
     ${etClause(entryType)}
+    ${dayTypeClause(dayType)}
     GROUP BY detection_group
     ORDER BY current_entries DESC
   `)
@@ -206,6 +218,7 @@ export async function queryClassSummary(
   detectionGroup: string,
   period: ComparablePeriod,
   entryType: EntryType,
+  dayType: DayType = 'all',
 ): Promise<ClassAggRow[]> {
   const [cs, ce] = period.current.map(toISODate)
   const [ps, pe] = period.prior.map(toISODate)
@@ -227,6 +240,7 @@ export async function queryClassSummary(
     WHERE (${periodWhere(period)})
     AND detection_group = '${detectionGroup.replace(/'/g, "''")}'
     ${etClause(entryType)}
+    ${dayTypeClause(dayType)}
     GROUP BY vehicle_class
     ORDER BY current_entries DESC
   `)
@@ -245,6 +259,7 @@ export async function queryClassSummary(
 export async function queryHourlyYoY(
   period: ComparablePeriod,
   entryType: EntryType,
+  dayType: DayType = 'all',
 ): Promise<HourlyYoYRow[]> {
   return query<HourlyYoYRow>(`
     SELECT
@@ -254,6 +269,7 @@ export async function queryHourlyYoY(
     FROM hourly
     WHERE (${periodWhere(period)})
     ${etClause(entryType)}
+    ${dayTypeClause(dayType)}
     GROUP BY YEAR(date), hour
     ORDER BY year, hour
   `)
@@ -263,6 +279,7 @@ export async function queryHourlyYoY(
 export async function queryHourlyByGroup(
   period: ComparablePeriod,
   entryType: EntryType,
+  dayType: DayType = 'all',
 ): Promise<HourlyGroupRow[]> {
   return query<HourlyGroupRow>(`
     SELECT
@@ -273,6 +290,7 @@ export async function queryHourlyByGroup(
     FROM hourly
     WHERE (${periodWhere(period)})
     ${etClause(entryType)}
+    ${dayTypeClause(dayType)}
     GROUP BY YEAR(date), detection_group, hour
     ORDER BY detection_group, year, hour
   `)
@@ -283,6 +301,7 @@ export async function queryHourlyByClass(
   detectionGroup: string,
   period: ComparablePeriod,
   entryType: EntryType,
+  dayType: DayType = 'all',
 ): Promise<HourlyClassRow[]> {
   return query<HourlyClassRow>(`
     SELECT
@@ -294,6 +313,7 @@ export async function queryHourlyByClass(
     WHERE (${periodWhere(period)})
     AND detection_group = '${detectionGroup.replace(/'/g, "''")}'
     ${etClause(entryType)}
+    ${dayTypeClause(dayType)}
     GROUP BY YEAR(date), vehicle_class, hour
     ORDER BY vehicle_class, year, hour
   `)
