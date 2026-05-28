@@ -1,8 +1,17 @@
 import * as Plot from '@observablehq/plot'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ChangeBadge from '../ChangeBadge'
 import type { DailyGroupTimeRow, GroupAggRow } from '../../lib/queries'
-import { COLOR_2025, COLOR_2026, buildDailyHoverRows, chartHoverMarks, fmtCount } from './chartHover'
+import {
+  COLOR_2025,
+  COLOR_2026,
+  buildDailyHoverRows,
+  chartHoverMarks,
+  fmtCount,
+  formatHoverReadout,
+  type DailyHoverRow,
+  type HoverReadout as HoverInfo,
+} from './chartHover'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -43,6 +52,7 @@ interface FacilityCardProps {
 
 function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
   const chartRef = useRef<HTMLDivElement>(null)
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
 
   useEffect(() => {
     if (!chartRef.current) return
@@ -59,6 +69,8 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
     const spanDays = times.length ? (Math.max(...times) - Math.min(...times)) / 864e5 : 0
     const xTicks      = spanDays > 60 ? ('month' as const) : 4
     const xTickFormat = spanDays > 60 ? fmtMonth : fmtMonthDay
+
+    const hoverRows = buildDailyHoverRows(parsed, (r) => r.entries)
 
     const plot = Plot.plot({
       width: chartRef.current.clientWidth || 280,
@@ -92,14 +104,22 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
           strokeWidth: (d: { year: number }) => (d.year === 2026 ? 2 : 1),
           curve: 'monotone-x',
         }),
-        ...chartHoverMarks(buildDailyHoverRows(parsed, (r) => r.entries), 'date', { r2025: 3, r2026: 3.5 }),
+        ...chartHoverMarks(hoverRows, 'date', { r2025: 3, r2026: 3.5 }),
       ],
     })
 
     chartRef.current.appendChild(plot)
 
+    const handleInput = () => {
+      const datum = plot.value as DailyHoverRow | null
+      setHoverInfo(datum ? formatHoverReadout(datum) : null)
+    }
+    plot.addEventListener('input', handleInput)
+
     return () => {
+      plot.removeEventListener('input', handleInput)
       plot.remove()
+      setHoverInfo(null)
     }
   }, [rows])
 
@@ -138,6 +158,25 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
       ) : (
         <>
           <div ref={chartRef} className="w-full" />
+          <div className="pointer-events-none h-5 flex items-center gap-1.5 text-[10px] text-gray-500 px-1 select-none whitespace-nowrap overflow-hidden">
+            {hoverInfo && (
+              <>
+                <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
+                <span className="text-gray-300" aria-hidden="true">·</span>
+                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
+                <span className="text-gray-300" aria-hidden="true">·</span>
+                <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
+                {hoverInfo.delta !== null && (
+                  <>
+                    <span className="text-gray-300" aria-hidden="true">·</span>
+                    <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+                      {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
+                    </span>
+                  </>
+                )}
+              </>
+            )}
+          </div>
           {has2026 && !has2025 && (
             <p className="mt-1 text-[10px] text-gray-400 leading-tight">
               No prior-year data for this period
