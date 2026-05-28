@@ -2,6 +2,7 @@ import * as Plot from '@observablehq/plot'
 import { useEffect, useRef } from 'react'
 import ChangeBadge from '../ChangeBadge'
 import type { DailyClassTimeRow, ClassAggRow, HourlyClassRow } from '../../lib/queries'
+import { COLOR_2025, COLOR_2026, buildDailyHoverRows, buildHourlyHoverRows, chartHoverMarks, fmtCount, fmtHour } from './chartHover'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -28,30 +29,6 @@ export interface ClassBreakdownDrawerProps {
   isLoading: boolean
   error: Error | null
   onClose: () => void
-}
-
-// ---------------------------------------------------------------------------
-// Color constants — 2025 gray, 2026 blue (matches DailyFacilityGrid)
-// ---------------------------------------------------------------------------
-
-const COLOR_2025 = '#d1d5db' // gray-300  — prior year, intentionally recedes
-const COLOR_2026 = '#3b82f6' // blue-500  — current year, brand accent
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function fmtHour(h: number): string {
-  if (h === 0) return '12a'
-  if (h === 12) return '12p'
-  return h < 12 ? `${h}a` : `${h - 12}p`
-}
-
-/** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
-const fmtCount = (v: number): string => {
-  if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
-  if (v >= 1_000)     return `${Math.round(v / 1_000)}K`
-  return String(Math.round(v))
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +87,7 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
             strokeWidth: (d: { year: number }) => (d.year === 2026 ? 2 : 1),
             curve: 'monotone-x',
           }),
+          ...chartHoverMarks(buildDailyHoverRows(parsed, (r) => r.entries), 'date', { r2025: 3, r2026: 3.5 }),
         ],
       })
     } else {
@@ -131,6 +109,7 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
             strokeWidth: (d: { year: number }) => (d.year === 2026 ? 2 : 1),
             curve: 'monotone-x',
           }),
+          ...chartHoverMarks(buildHourlyHoverRows(hourlyRows, (r) => r.avg_entries), 'hour', { r2025: 3, r2026: 3.5 }),
         ],
       })
     }

@@ -2,6 +2,7 @@ import * as Plot from '@observablehq/plot'
 import { useEffect, useRef } from 'react'
 import ChangeBadge from '../ChangeBadge'
 import type { HourlyGroupRow, GroupAggRow } from '../../lib/queries'
+import { COLOR_2025, COLOR_2026, buildHourlyHoverRows, chartHoverMarks, fmtCount, fmtHour } from './chartHover'
 
 // ---------------------------------------------------------------------------
 // Props
@@ -27,29 +28,6 @@ export interface HourlyFacilityGridProps {
   isLoading: boolean
   error: Error | null
   onGroupClick: (detectionGroup: string) => void
-}
-
-// ---------------------------------------------------------------------------
-// Color constants — 2025 gray, 2026 blue (matches YoYDailyChart convention)
-// ---------------------------------------------------------------------------
-const COLOR_2025 = '#d1d5db' // gray-300  — prior year, intentionally recedes
-const COLOR_2026 = '#3b82f6' // blue-500  — current year, brand accent
-
-// ---------------------------------------------------------------------------
-// Hour label helper
-// ---------------------------------------------------------------------------
-
-function fmtHour(h: number): string {
-  if (h === 0) return '12a'
-  if (h === 12) return '12p'
-  return h < 12 ? `${h}a` : `${h - 12}p`
-}
-
-/** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
-const fmtCount = (v: number): string => {
-  if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}M`
-  if (v >= 1_000)     return `${Math.round(v / 1_000)}K`
-  return String(Math.round(v))
 }
 
 // ---------------------------------------------------------------------------
@@ -103,18 +81,7 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
           strokeWidth: (d: HourlyGroupRow) => (d.year === 2026 ? 2 : 1),
           curve: 'monotone-x',
         }),
-        ...(() => {
-          const lookup25 = new Map(rows.filter(r => r.year === 2025).map(r => [r.hour, r.avg_entries]))
-          const lookup26 = new Map(rows.filter(r => r.year === 2026).map(r => [r.hour, r.avg_entries]))
-          const wide = Array.from({ length: 24 }, (_, h) => ({
-            hour: h, e26: lookup26.get(h) ?? null, e25: lookup25.get(h) ?? null,
-          }))
-          return [
-            Plot.ruleX(wide, Plot.pointerX({ x: 'hour', stroke: '#9ca3af', strokeWidth: 1 })),
-            Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.e25, fill: COLOR_2025, stroke: 'white', strokeWidth: 1.5, r: 3 })),
-            Plot.dot(wide, Plot.pointerX({ x: 'hour', y: (d) => d.e26, fill: COLOR_2026, stroke: 'white', strokeWidth: 1.5, r: 3.5 })),
-          ]
-        })(),
+        ...chartHoverMarks(buildHourlyHoverRows(rows, (r) => r.avg_entries), 'hour', { r2025: 3, r2026: 3.5 }),
       ],
     })
 
