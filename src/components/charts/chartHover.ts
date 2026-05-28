@@ -46,19 +46,23 @@ interface HourlySourceRow {
   hour: number
 }
 
+function plotDateKey(plotDate: string): string {
+  return plotDate.slice(0, 10)
+}
+
 export function buildDailyHoverRows<T extends DailySourceRow>(
   rows: T[],
   value: (row: T) => number,
 ): DailyHoverRow[] {
   const rows2025 = rows.filter((row) => row.year === 2025)
   const rows2026 = rows.filter((row) => row.year === 2026)
-  const lookup2025 = new Map(rows2025.map((row) => [row.date.getTime(), value(row)]))
+  const lookup2025 = new Map(rows2025.map((row) => [plotDateKey(row.plot_date), value(row)]))
 
   return rows2026.map((row) => ({
     date: row.date,
     plot_date: row.plot_date,
     value2026: value(row),
-    value2025: lookup2025.get(row.date.getTime()) ?? null,
+    value2025: lookup2025.get(plotDateKey(row.plot_date)) ?? null,
   }))
 }
 
