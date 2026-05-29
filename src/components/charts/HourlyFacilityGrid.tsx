@@ -124,17 +124,15 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') onClick()
       }}
-      className="
-        bg-white rounded-lg border border-gray-200 p-3
-        cursor-pointer
-        transition-shadow
-        hover:ring-2 hover:ring-blue-400 hover:ring-offset-1
-        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-      "
+      className="bg-white border border-ink-900 p-3 cursor-pointer transition-colors hover:bg-paper-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+      style={{ transition: 'background var(--dur-fast) var(--ease-standard)' }}
     >
       {/* Card header */}
       <div className="flex items-start justify-between gap-2 mb-1">
-        <span className="text-xs font-semibold text-gray-700 leading-tight truncate">
+        <span
+          className="text-xs font-semibold leading-tight truncate"
+          style={{ color: 'var(--fg)', fontFamily: 'var(--font-display)' }}
+        >
           {group}
         </span>
         <ChangeBadge pctChange={pctChange} />
@@ -142,24 +140,30 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
 
       {/* Chart area */}
       {rows.length === 0 ? (
-        <div className="flex items-center justify-center h-[120px] text-xs text-gray-400">
+        <div
+          className="flex items-center justify-center h-[120px] text-xs"
+          style={{ color: 'var(--fg-faint)' }}
+        >
           No data
         </div>
       ) : (
         <>
           <div ref={chartRef} className="w-full" />
-          <div className="pointer-events-none h-5 flex items-center gap-1.5 text-[10px] text-gray-500 px-1 select-none whitespace-nowrap overflow-hidden">
+          <div
+            className="pointer-events-none h-5 flex items-center gap-1.5 px-1 select-none whitespace-nowrap overflow-hidden"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}
+          >
             {hoverInfo && (
               <>
-                <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
-                <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
-                <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
+                <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{hoverInfo.timeLabel}</span>
+                <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+                <span><span style={{ color: 'var(--accent)', fontWeight: 600 }}>2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
+                <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+                <span><span style={{ color: 'var(--fg-faint)' }}>2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
                 {hoverInfo.delta !== null && (
                   <>
-                    <span className="text-gray-300" aria-hidden="true">·</span>
-                    <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+                    <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+                    <span style={{ color: hoverInfo.delta < 0 ? '#0E2A47' : '#C8102E' }}>
                       {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
                     </span>
                   </>
@@ -168,7 +172,7 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
             )}
           </div>
           {has2026 && !has2025 && (
-            <p className="mt-1 text-[10px] text-gray-400 leading-tight">
+            <p className="mt-1 text-[10px] leading-tight" style={{ color: 'var(--fg-faint)' }}>
               No prior-year data for this period
             </p>
           )}
@@ -184,12 +188,12 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3 animate-pulse">
+    <div className="bg-white border border-ink-900 p-3 animate-pulse">
       <div className="flex items-start justify-between gap-2 mb-1">
-        <div className="h-3 bg-gray-200 rounded w-3/4" />
-        <div className="h-4 bg-gray-200 rounded w-10" />
+        <div className="h-3 bg-paper-200 w-3/4" />
+        <div className="h-4 bg-paper-200 w-10" />
       </div>
-      <div className="h-[120px] bg-gray-100 rounded mt-2" />
+      <div className="h-[120px] bg-paper-100 mt-2" />
     </div>
   )
 }
@@ -225,7 +229,7 @@ export function HourlyFacilityGrid({
   // --- Error state ---------------------------------------------------------
   if (error) {
     return (
-      <p className="text-sm text-red-600 py-4">
+      <p className="text-sm py-4" style={{ color: 'var(--accent)' }}>
         Failed to load facility hourly data: {error.message}
       </p>
     )
@@ -234,7 +238,7 @@ export function HourlyFacilityGrid({
   // --- Empty state ---------------------------------------------------------
   if (aggData.length === 0) {
     return (
-      <p className="text-sm text-gray-500 py-4">
+      <p className="text-sm py-4" style={{ color: 'var(--fg-muted)' }}>
         No facility data available for the selected period.
       </p>
     )

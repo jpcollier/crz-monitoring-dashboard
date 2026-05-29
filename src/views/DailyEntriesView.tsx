@@ -28,12 +28,12 @@ function fmtStat(v: number): string {
   return v.toLocaleString()
 }
 
-/** Render a % change value: decrease = green (CRZ goal), increase = red. */
+/** Render a % change value: decrease = indigo (good for CRZ goal), increase = signal red. */
 function PctValue({ pct }: { pct: number | null }) {
-  if (pct === null) return <span className="text-gray-400">—</span>
+  if (pct === null) return <span style={{ color: 'var(--fg-faint)' }}>—</span>
   const sign = pct >= 0 ? '+' : ''
   return (
-    <span className={pct < 0 ? 'text-green-600' : 'text-red-500'}>
+    <span style={{ color: pct < 0 ? '#0E2A47' : '#C8102E' }}>
       {sign}{pct.toFixed(1)}%
     </span>
   )
@@ -127,7 +127,7 @@ export default function DailyEntriesView() {
       <FilterBar />
 
       {/* Summary stat row */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-px bg-ink-900 border border-ink-900">
         <StatCard
           label="YTD daily avg"
           value={dailyAvg !== null ? fmtStat(dailyAvg) : '—'}
@@ -150,19 +150,24 @@ export default function DailyEntriesView() {
         />
       </div>
 
-      <div className="mt-8 space-y-10">
-        <section>
-          <h2 className="text-[13px] font-semibold text-gray-600 tracking-wide mb-4">Systemwide daily entries</h2>
-          <YoYDailyChart
-            data={yoyData}
-            summary={summary}
-            isLoading={yoyLoading}
-            error={yoyError}
-          />
+      <div className="mt-6 space-y-8">
+        <section className="bg-white border border-ink-900">
+          <header className="flex items-baseline justify-between px-5 py-3 border-b border-ink-900">
+            <span className="eyebrow">Systemwide daily entries</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>2026 vs 2025</span>
+          </header>
+          <div className="p-5">
+            <YoYDailyChart
+              data={yoyData}
+              summary={summary}
+              isLoading={yoyLoading}
+              error={yoyError}
+            />
+          </div>
         </section>
 
         <section>
-          <h2 className="text-[13px] font-semibold text-gray-600 tracking-wide mb-4">By detection group</h2>
+          <div className="eyebrow mb-4">By detection group</div>
           <DailyFacilityGrid
             timeData={groupTimeData}
             aggData={groupAggData}

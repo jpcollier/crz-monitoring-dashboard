@@ -1,10 +1,109 @@
 @import "tailwindcss";
 
-@layer base {
-  body {
-    font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    font-optical-sizing: auto;
-  }
+/* ============================================================
+   COLLIER DESIGN SYSTEM — Tailwind v4 theme tokens
+   Swiss International Style, warmed by a Pan Am cream ground.
+   ============================================================ */
+
+@theme {
+  /* Paper */
+  --color-paper-50:  #FBF6EA;
+  --color-paper-100: #F4EBD9;
+  --color-paper-200: #ECE0C6;
+  --color-paper-300: #DDD0B2;
+
+  /* Ink */
+  --color-ink-900: #111111;
+  --color-ink-800: #1F1F1F;
+  --color-ink-700: #2E2E2E;
+  --color-ink-600: #555555;
+  --color-ink-500: #7A7A7A;
+  --color-ink-400: #9C988E;
+  --color-ink-300: #BFBAAB;
+  --color-ink-200: #DAD4C3;
+  --color-ink-100: #ECE7D8;
+
+  /* Signal red */
+  --color-signal-700: #8A1E1A;
+  --color-signal-600: #B0241D;
+  --color-signal-500: #C8102E;
+  --color-signal-400: #E04638;
+
+  /* Indigo / navy */
+  --color-indigo-900: #08182B;
+  --color-indigo-800: #0E2A47;
+  --color-indigo-700: #16406B;
+  --color-indigo-500: #2F6BB0;
+
+  /* Gold */
+  --color-gold-600: #A8862C;
+  --color-gold-500: #C9A961;
+  --color-gold-300: #E4CE96;
+
+  /* Fonts */
+  --font-sans:    "Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  --font-display: "Inter Tight", "Inter", "Helvetica Neue", "Helvetica", sans-serif;
+  --font-mono:    "IBM Plex Mono", "SF Mono", "Menlo", "Consolas", monospace;
 }
+
+/* ============================================================
+   SEMANTIC CSS VARS — always use these in components
+   ============================================================ */
+:root {
+  --bg:           #F4EBD9;
+  --bg-raised:    #FBF6EA;
+  --bg-sunken:    #ECE0C6;
+  --bg-inverse:   #111111;
+  --bg-card:      #FFFFFF;
+
+  --fg:           #111111;
+  --fg-muted:     #555555;
+  --fg-subtle:    #7A7A7A;
+  --fg-faint:     #9C988E;
+  --fg-inverse:   #F4EBD9;
+
+  --accent:       #C8102E;
+  --link:         #B0241D;
+  --link-hover:   #8A1E1A;
+
+  --rule:         #111111;
+  --rule-soft:    #DAD4C3;
+  --rule-faint:   #ECE7D8;
+
+  --shadow-card:  0 2px 0 #111111;
+  --shadow-stamp: 4px 4px 0 #111111;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --dur-fast:      120ms;
+  --dur-base:      200ms;
+}
+
+/* ============================================================
+   ELEMENT DEFAULTS
+   ============================================================ */
+html {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+}
+
+/* Eyebrow / signage label */
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--fg-muted);
+}
+
+/* Tabular numerals utility */
+.tabular { font-variant-numeric: tabular-nums; }

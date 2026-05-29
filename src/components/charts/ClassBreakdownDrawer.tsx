@@ -109,16 +109,19 @@ function buildClassHourlyHoverRows(
 
 function ClassHoverReadout({ hoverInfo }: { hoverInfo: HoverReadout }) {
   return (
-    <div className="mt-1 flex min-h-4 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] leading-tight text-gray-500 select-none">
-      <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
-      <span className="text-gray-300" aria-hidden="true">·</span>
-      <span><span className="font-medium text-blue-500">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
-      <span className="text-gray-300" aria-hidden="true">·</span>
-      <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
+    <div
+      className="mt-1 flex min-h-4 flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-tight select-none"
+      style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg-muted)' }}
+    >
+      <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{hoverInfo.timeLabel}</span>
+      <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+      <span><span style={{ color: 'var(--accent)', fontWeight: 600 }}>2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
+      <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+      <span><span style={{ color: 'var(--fg-faint)' }}>2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
       {hoverInfo.delta !== null && (
         <>
-          <span className="text-gray-300" aria-hidden="true">·</span>
-          <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+          <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+          <span style={{ color: hoverInfo.delta < 0 ? '#0E2A47' : '#C8102E' }}>
             {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
           </span>
         </>
@@ -251,10 +254,13 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
   const has2025 = rows.some(r => r.year === 2025)
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3">
+    <div className="bg-white border border-ink-900 p-3">
       {/* Card header */}
       <div className="flex items-center justify-between gap-2 mb-1">
-        <span className="text-xs font-semibold text-gray-700 leading-tight truncate">
+        <span
+          className="text-xs font-semibold leading-tight truncate"
+          style={{ color: 'var(--fg)', fontFamily: 'var(--font-display)' }}
+        >
           {vehicleClass}
         </span>
         <ChangeBadge pctChange={pctChange} />
@@ -262,7 +268,10 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
 
       {/* Chart area */}
       {rows.length === 0 ? (
-        <div className="flex items-center justify-center h-[100px] text-xs text-gray-400">
+        <div
+          className="flex items-center justify-center h-[100px] text-xs"
+          style={{ color: 'var(--fg-faint)' }}
+        >
           No data
         </div>
       ) : (
@@ -270,7 +279,7 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
           <div ref={chartRef} className="w-full" />
           {hoverInfo && <ClassHoverReadout hoverInfo={hoverInfo} />}
           {has2026 && !has2025 && (
-            <p className="mt-1 text-[10px] text-gray-400 leading-tight">
+            <p className="mt-1 text-[10px] leading-tight" style={{ color: 'var(--fg-faint)' }}>
               No prior-year data for this period
             </p>
           )}
@@ -286,12 +295,12 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
 
 function SkeletonCard() {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-3 animate-pulse">
+    <div className="bg-white border border-ink-900 p-3 animate-pulse">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <div className="h-3 bg-gray-200 rounded w-3/4" />
-        <div className="h-4 bg-gray-200 rounded w-10 shrink-0" />
+        <div className="h-3 bg-paper-200 w-3/4" />
+        <div className="h-4 bg-paper-200 w-10 shrink-0" />
       </div>
-      <div className="h-[100px] bg-gray-100 rounded mt-2" />
+      <div className="h-[100px] bg-paper-100 mt-2" />
     </div>
   )
 }
@@ -344,44 +353,41 @@ export function ClassBreakdownDrawer({
             : 'Vehicle class breakdown'
         }
         className={[
-          'fixed top-0 right-0 z-50 h-full w-[420px] bg-gray-50 shadow-xl',
+          'fixed top-0 right-0 z-50 h-full w-[420px] border-l border-ink-900',
           'flex flex-col',
           'transition-transform duration-200',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         ].join(' ')}
+        style={{ background: 'var(--bg)' }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 bg-white shrink-0">
-          <h2 className="text-sm font-semibold text-gray-800 leading-snug truncate">
-            Vehicle class breakdown
+        <div
+          className="flex items-center justify-between gap-3 px-5 py-3 border-b border-ink-900 bg-white shrink-0"
+        >
+          <div>
+            <div className="eyebrow">Vehicle class breakdown</div>
             {detectionGroup && (
-              <span className="block text-xs font-normal text-gray-500 truncate">
+              <div
+                className="mt-0.5 truncate"
+                style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 14, color: 'var(--fg)', letterSpacing: '-0.01em' }}
+              >
                 {detectionGroup}
-              </span>
+              </div>
             )}
-          </h2>
+          </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close drawer"
-            className="
-              shrink-0 flex items-center justify-center
-              w-7 h-7 rounded
-              text-gray-500 hover:text-gray-800
-              hover:bg-gray-100
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
-              transition-colors
-            "
+            className="shrink-0 flex items-center justify-center w-7 h-7 border border-ink-900 hover:bg-paper-200 focus-visible:outline-2 focus-visible:outline-ink-900 transition-colors"
+            style={{ color: 'var(--fg)' }}
           >
-            <span aria-hidden="true" className="text-base leading-none">
-              &times;
-            </span>
+            <span aria-hidden="true" className="text-base leading-none">&times;</span>
           </button>
         </div>
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {/* Loading state */}
           {isLoading && (
             <>
               {Array.from({ length: 6 }).map((_, i) => (
@@ -391,19 +397,16 @@ export function ClassBreakdownDrawer({
             </>
           )}
 
-          {/* Error state */}
           {!isLoading && error && (
-            <p className="text-sm text-red-600 py-2">
+            <p className="text-sm py-2" style={{ color: 'var(--accent)' }}>
               Failed to load class data: {error.message}
             </p>
           )}
 
-          {/* Empty state */}
           {!isLoading && !error && aggData.length === 0 && (
-            <p className="text-sm text-gray-500 py-2">No class data available.</p>
+            <p className="text-sm py-2" style={{ color: 'var(--fg-muted)' }}>No class data available.</p>
           )}
 
-          {/* Class cards — aggData is ordered by current_entries DESC from the query */}
           {!isLoading &&
             !error &&
             aggData.map(agg => (
@@ -419,7 +422,7 @@ export function ClassBreakdownDrawer({
 
         {/* Legend footer */}
         {!isLoading && !error && aggData.length > 0 && (
-          <div className="shrink-0 flex items-center gap-4 px-4 py-2 border-t border-gray-200 bg-white">
+          <div className="shrink-0 flex items-center gap-4 px-5 py-2 border-t border-ink-900 bg-white">
             <LegendItem color={COLOR_2026} label="2026" />
             <LegendItem color={COLOR_2025} label="2025" />
           </div>
@@ -435,10 +438,13 @@ export function ClassBreakdownDrawer({
 
 function LegendItem({ color, label }: { color: string; label: string }) {
   return (
-    <span className="flex items-center gap-1.5 text-xs text-gray-600">
+    <span
+      className="flex items-center gap-1.5 text-xs"
+      style={{ fontFamily: 'var(--font-mono)', color: 'var(--fg-muted)' }}
+    >
       <span
         aria-hidden="true"
-        className="inline-block w-5 h-[2px] rounded"
+        className="inline-block w-5 h-[2px]"
         style={{ backgroundColor: color }}
       />
       {label}

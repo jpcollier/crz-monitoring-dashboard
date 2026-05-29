@@ -95,19 +95,24 @@ export default function HourlyProfilesView() {
     <div>
       <FilterBar showDayType />
 
-      <div className="mt-8 space-y-10">
-        <section>
-          <h2 className="text-[13px] font-semibold text-gray-600 tracking-wide mb-4">Systemwide hourly profile</h2>
-          <HourlyProfileChart
-            data={hourlyData}
-            summary={summary}
-            isLoading={hourlyLoading}
-            error={hourlyError}
-          />
+      <div className="mt-6 space-y-8">
+        <section className="bg-white border border-ink-900">
+          <header className="flex items-baseline justify-between px-5 py-3 border-b border-ink-900">
+            <span className="eyebrow">Systemwide hourly profile</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>avg entries by hour</span>
+          </header>
+          <div className="p-5">
+            <HourlyProfileChart
+              data={hourlyData}
+              summary={summary}
+              isLoading={hourlyLoading}
+              error={hourlyError}
+            />
+          </div>
         </section>
 
         <section>
-          <h2 className="text-[13px] font-semibold text-gray-600 tracking-wide mb-4">By detection group</h2>
+          <div className="eyebrow mb-4">By detection group</div>
           <HourlyFacilityGrid
             timeData={groupTimeData}
             aggData={groupAggData}

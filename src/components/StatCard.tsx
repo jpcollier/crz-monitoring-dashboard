@@ -1,7 +1,3 @@
-// ---------------------------------------------------------------------------
-// StatCard — a single KPI tile for the summary stat row
-// ---------------------------------------------------------------------------
-
 interface StatCardProps {
   label: string
   value: React.ReactNode
@@ -10,14 +6,22 @@ interface StatCardProps {
 
 export default function StatCard({ label, value, isLoading = false }: StatCardProps) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-5 py-5 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 leading-none mb-2.5">
+    <div className="bg-white px-5 py-5">
+      <p className="eyebrow mb-2">
         {label}
       </p>
       {isLoading ? (
-        <div className="h-8 w-24 bg-gray-100 rounded animate-pulse mt-1" />
+        <div className="h-9 w-24 bg-paper-200 mt-1" />
       ) : (
-        <p className="text-2xl font-bold text-gray-900 leading-tight tabular-nums">
+        <p
+          className="text-ink-900 leading-none tabular"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 800,
+            fontSize: 40,
+            letterSpacing: '-0.02em',
+          }}
+        >
           {value}
         </p>
       )}

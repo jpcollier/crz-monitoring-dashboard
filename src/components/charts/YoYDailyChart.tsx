@@ -117,7 +117,7 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
     y: {
       label: 'Entries',
       tickFormat: fmtCount,
-      grid: '#f3f4f6',
+      grid: '#ECE7D8',
     },
     marks: [
       // Prior-year line — light gray, thin, clearly subordinate
@@ -240,7 +240,7 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
     <div ref={containerRef} className="relative w-full">
       {isLoading && (
         <div
-          className="h-[280px] animate-pulse bg-gray-100 rounded"
+          className="h-[280px] bg-paper-200"
           role="status"
           aria-label="Loading chart"
         />
@@ -248,7 +248,8 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
 
       {!isLoading && error && (
         <div
-          className="h-[280px] flex items-center justify-center text-sm text-red-600 bg-red-50 rounded border border-red-100 px-4 text-center"
+          className="h-[280px] flex items-center justify-center text-sm border border-signal-500 px-4 text-center"
+          style={{ color: 'var(--accent)', background: '#FBF6EA' }}
           role="alert"
         >
           Failed to load chart data: {error.message}
@@ -256,7 +257,10 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
       )}
 
       {!isLoading && !error && data.length === 0 && (
-        <div className="h-[280px] flex items-center justify-center text-sm text-gray-500 bg-gray-50 rounded border border-gray-100">
+        <div
+          className="h-[280px] flex items-center justify-center text-sm border border-ink-200"
+          style={{ color: 'var(--fg-muted)', background: 'var(--bg-raised)' }}
+        >
           No data for the selected period.
         </div>
       )}
@@ -274,18 +278,21 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
             </div>
           )}
           <div ref={plotRef} />
-          <div className="h-5 flex items-center gap-2 text-xs text-gray-500 px-1 select-none">
+          <div
+            className="h-5 flex items-center gap-2 px-1 select-none"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}
+          >
             {hoverInfo && (
               <>
-                <span className="font-medium text-gray-700">{hoverInfo.timeLabel}</span>
-                <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-blue-500 font-medium">2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
-                <span className="text-gray-300" aria-hidden="true">·</span>
-                <span><span className="text-gray-400">2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
+                <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{hoverInfo.timeLabel}</span>
+                <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+                <span><span style={{ color: 'var(--accent)', fontWeight: 600 }}>2026</span>: {hoverInfo.value2026Label ?? '—'}</span>
+                <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+                <span><span style={{ color: 'var(--fg-faint)' }}>2025</span>: {hoverInfo.value2025Label ?? '—'}</span>
                 {hoverInfo.delta !== null && (
                   <>
-                    <span className="text-gray-300" aria-hidden="true">·</span>
-                    <span className={hoverInfo.delta < 0 ? 'text-green-600' : 'text-orange-500'}>
+                    <span style={{ color: 'var(--rule-soft)' }} aria-hidden="true">·</span>
+                    <span style={{ color: hoverInfo.delta < 0 ? '#0E2A47' : '#C8102E' }}>
                       {`${hoverInfo.deltaLabel}${hoverInfo.deltaPctLabel ? ` (${hoverInfo.deltaPctLabel})` : ''}`}
                     </span>
                   </>
@@ -294,7 +301,7 @@ export function YoYDailyChart({ data, summary, isLoading, error }: YoYDailyChart
             )}
           </div>
           {hasOrphan2026 && (
-            <p className="mt-1 text-[11px] text-gray-400 leading-snug">
+            <p className="mt-1 text-[11px] leading-snug" style={{ color: 'var(--fg-faint)' }}>
               Note: prior-year data unavailable for Jan 1–4 (CRZ launched Jan 5, 2025).
             </p>
           )}

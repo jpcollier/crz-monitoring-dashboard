@@ -16,7 +16,8 @@
       "PowerShell(node --version)",
       "PowerShell(pnpm --version)",
       "Bash(grep -o 'onlyBuiltDependencies[^\"]*\"[^\"]*\"' \"C:/Program Files/nodejs/node_modules/pnpm/dist/pnpm.mjs\" | head -20)",
-      "Bash(pnpm typecheck *)"
+      "Bash(pnpm typecheck *)",
+      "WebFetch(domain:api.anthropic.com)"
     ]
   }
 }

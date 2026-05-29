@@ -20,10 +20,6 @@ const DAY_TYPES: { value: DayType; label: string }[] = [
   { value: 'weekend', label: 'Weekend' },
 ]
 
-// ---------------------------------------------------------------------------
-// Segmented control
-// ---------------------------------------------------------------------------
-
 function SegmentedControl<T extends string>({
   options,
   value,
@@ -34,16 +30,18 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-gray-100 p-1 gap-0.5">
-      {options.map((opt) => (
+    <div className="inline-flex border border-ink-900">
+      {options.map((opt, i) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          className={`px-3.5 py-1.5 text-sm rounded-md transition-colors ${
+          className={`px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+            i < options.length - 1 ? 'border-r border-ink-900' : ''
+          } ${
             value === opt.value
-              ? 'bg-gray-800 text-white font-medium shadow-sm'
-              : 'text-gray-500 hover:text-gray-800 font-normal'
+              ? 'bg-ink-900 text-paper-50'
+              : 'bg-transparent text-ink-900 hover:bg-paper-200'
           }`}
         >
           {opt.label}
@@ -53,30 +51,21 @@ function SegmentedControl<T extends string>({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Label above a control group
-// ---------------------------------------------------------------------------
-
 function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 leading-none">
+    <span className="eyebrow">
       {children}
     </span>
   )
 }
 
-// ---------------------------------------------------------------------------
-// FilterBar
-// ---------------------------------------------------------------------------
-
 export default function FilterBar({ showDayType = false }: { showDayType?: boolean }) {
   const [state, setState] = useUrlState()
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 shadow-sm">
+    <div className="bg-white border border-ink-900 px-6 py-5">
       <div className="flex flex-wrap items-center gap-8">
 
-        {/* Period preset */}
         <div className="flex flex-col gap-2">
           <FilterLabel>Period</FilterLabel>
           <SegmentedControl
@@ -86,7 +75,6 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           />
         </div>
 
-        {/* Custom date range — only shown when preset === 'custom' */}
         {state.preset === 'custom' && (
           <div className="flex flex-col gap-2">
             <FilterLabel>Date range</FilterLabel>
@@ -95,18 +83,20 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 type="date"
                 value={state.customStart ?? ''}
                 onChange={(e) => setState({ customStart: e.target.value })}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 bg-white
-                           focus:outline-none focus:ring-2 focus:ring-gray-800/20 focus:border-gray-400
+                className="border border-ink-900 px-3 py-2 text-sm text-ink-900 bg-white font-mono
+                           focus:outline-none focus:ring-2 focus:ring-ink-900/20
                            transition-colors"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, borderRadius: 2 }}
               />
-              <span className="text-gray-300 select-none">—</span>
+              <span className="text-ink-400 select-none">—</span>
               <input
                 type="date"
                 value={state.customEnd ?? ''}
                 onChange={(e) => setState({ customEnd: e.target.value })}
-                className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 bg-white
-                           focus:outline-none focus:ring-2 focus:ring-gray-800/20 focus:border-gray-400
+                className="border border-ink-900 px-3 py-2 text-sm text-ink-900 bg-white
+                           focus:outline-none focus:ring-2 focus:ring-ink-900/20
                            transition-colors"
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, borderRadius: 2 }}
               />
             </div>
           </div>
@@ -114,10 +104,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
 
         {showDayType && (
           <>
-            {/* Vertical divider before the day type filter */}
-            <div className="hidden sm:block self-stretch w-px bg-gray-100" />
-
-            {/* Day type */}
+            <div className="hidden sm:block self-stretch w-px bg-ink-200" />
             <div className="flex flex-col gap-2">
               <FilterLabel>Day type</FilterLabel>
               <SegmentedControl
@@ -129,10 +116,8 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           </>
         )}
 
-        {/* Vertical divider between the two groups */}
-        <div className="hidden sm:block self-stretch w-px bg-gray-100" />
+        <div className="hidden sm:block self-stretch w-px bg-ink-200" />
 
-        {/* Entry type */}
         <div className="flex flex-col gap-2">
           <FilterLabel>Entry type</FilterLabel>
           <SegmentedControl

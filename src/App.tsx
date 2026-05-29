@@ -7,10 +7,10 @@ function NavItem({ to, label }: { to: string; label: string }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `px-4 py-1.5 text-sm rounded-full transition-colors ${
+        `px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors border-r border-ink-900 last:border-r-0 ${
           isActive
-            ? 'bg-gray-800 text-white font-medium'
-            : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 font-normal'
+            ? 'bg-ink-900 text-paper-50'
+            : 'bg-transparent text-ink-900 hover:bg-paper-200'
         }`
       }
     >
@@ -21,22 +21,26 @@ function NavItem({ to, label }: { to: string; label: string }) {
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between py-5">
-            {/* Wordmark + subtitle */}
+    <div className="min-h-screen bg-paper-100">
+      <header>
+        {/* 6px signal red masthead bar */}
+        <div className="h-[6px] bg-signal-500 border-b border-ink-900" />
+        {/* Header body */}
+        <div className="border-b border-ink-900 bg-paper-100">
+          <div className="max-w-[1240px] mx-auto px-8 flex items-center justify-between py-4 gap-8">
+            {/* Wordmark */}
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight tracking-tight">
-                MTA Congestion Relief Zone
-              </h1>
-              <p className="mt-1 text-[13px] text-gray-500 leading-snug">
-                Daily vehicle entries into the Congestion Relief Zone and excluded roadways
-              </p>
+              <div className="eyebrow mb-1">MTA · Congestion Relief Zone</div>
+              <div
+                className="font-display font-extrabold text-ink-900 leading-none tracking-tight"
+                style={{ fontFamily: 'var(--font-display)', fontSize: 22, letterSpacing: '-0.02em' }}
+              >
+                Vehicle Entries Monitor
+              </div>
             </div>
 
-            {/* View tabs */}
-            <nav className="flex items-center gap-1">
+            {/* Segmented nav */}
+            <nav className="flex border border-ink-900">
               <NavItem to="/daily" label="Daily Entries" />
               <NavItem to="/hourly" label="Hourly Profiles" />
             </nav>
@@ -44,7 +48,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="max-w-[1240px] mx-auto px-8 py-8">
         <Routes>
           <Route path="/" element={<Navigate to="/daily" replace />} />
           <Route path="/daily" element={<DailyEntriesView />} />

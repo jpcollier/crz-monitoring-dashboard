@@ -1,8 +1,8 @@
 import * as Plot from '@observablehq/plot'
 
-export const COLOR_2025 = '#d1d5db' // gray-300 — prior year, intentionally recedes
-export const COLOR_2026 = '#3b82f6' // blue-500 — current year, brand accent
-export const HOVER_RULE_COLOR = '#9ca3af'
+export const COLOR_2025 = '#9C988E' // ink-400 — prior year, warm neutral recedes
+export const COLOR_2026 = '#C8102E' // signal-500 — current year, brand accent
+export const HOVER_RULE_COLOR = '#BFBAAB' // ink-300
 
 /** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
 export const fmtCount = (v: number): string => {
