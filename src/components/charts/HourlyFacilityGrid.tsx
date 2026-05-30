@@ -30,7 +30,7 @@ import {
  * @param isLoading   - Shows a skeleton grid of 12 placeholder cards while true.
  * @param error       - Renders a short inline error message when non-null.
  * @param onGroupClick - Called with the detection_group string when a card is
- *                       clicked. Typically opens ClassBreakdownDrawer.
+ *                       clicked. Typically opens FacilityDetailModal.
  */
 export interface HourlyFacilityGridProps {
   timeData: HourlyGroupRow[]

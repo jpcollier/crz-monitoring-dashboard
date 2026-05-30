@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import FilterBar from '../components/FilterBar'
 import StatCard from '../components/StatCard'
-import { ClassBreakdownDrawer } from '../components/charts/ClassBreakdownDrawer'
 import { DailyFacilityGrid } from '../components/charts/DailyFacilityGrid'
+import { FacilityDetailModal } from '../components/charts/FacilityDetailModal'
 import { YoYDailyChart } from '../components/charts/YoYDailyChart'
 import type { SystemwideSummary } from '../components/charts/YoYDailyChart'
 import { useDuckQuery } from '../hooks/useDuckQuery'
@@ -97,6 +97,20 @@ export default function DailyEntriesView() {
     { enabled: hasValidPeriod },
   )
 
+  const selectedGroupRows = useMemo(
+    () => selectedGroup
+      ? groupTimeData.filter((row) => row.detection_group === selectedGroup)
+      : [],
+    [groupTimeData, selectedGroup],
+  )
+
+  const selectedGroupSummary = useMemo(
+    () => selectedGroup
+      ? groupAggData.find((row) => row.detection_group === selectedGroup) ?? null
+      : null,
+    [groupAggData, selectedGroup],
+  )
+
   // -------------------------------------------------------------------------
   // Class breakdown drawer — only fetches when a group is selected
   // -------------------------------------------------------------------------
@@ -184,13 +198,17 @@ export default function DailyEntriesView() {
         </section>
       </div>
 
-      <ClassBreakdownDrawer
+      <FacilityDetailModal
         mode="daily"
         detectionGroup={selectedGroup}
-        timeData={classTimeData}
-        aggData={classAggData}
-        isLoading={classLoading}
-        error={classError}
+        groupRows={selectedGroupRows}
+        groupSummary={selectedGroupSummary}
+        isGroupLoading={groupLoading}
+        groupError={groupError}
+        classRows={classTimeData}
+        classAggRows={classAggData}
+        isClassLoading={classLoading}
+        classError={classError}
         onClose={() => setSelectedGroup(null)}
       />
     </div>
