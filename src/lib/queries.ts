@@ -192,7 +192,7 @@ export async function queryGroupSummary(
   `)
 }
 
-/** Time-series data for ClassBreakdownDrawer (one row per date × class × year). */
+/** Time-series data for FacilityDetailModal (one row per date × class × year). */
 export async function queryDailyByClass(
   detectionGroup: string,
   period: ComparablePeriod,
@@ -248,7 +248,7 @@ export async function queryClassSummary(
 
 // ---------------------------------------------------------------------------
 // Hourly profile queries — used by HourlyProfileChart, HourlyFacilityGrid,
-// and ClassBreakdownDrawer (hourly mode)
+// and FacilityDetailModal (hourly mode)
 // ---------------------------------------------------------------------------
 
 /**
@@ -296,7 +296,7 @@ export async function queryHourlyByGroup(
   `)
 }
 
-/** Per-class average-entries-per-hour for ClassBreakdownDrawer (hourly mode). */
+/** Per-class average-entries-per-hour for FacilityDetailModal (hourly mode). */
 export async function queryHourlyByClass(
   detectionGroup: string,
   period: ComparablePeriod,

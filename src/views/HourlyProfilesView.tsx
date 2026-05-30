@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import FilterBar from '../components/FilterBar'
-import { ClassBreakdownDrawer } from '../components/charts/ClassBreakdownDrawer'
+import { FacilityDetailModal } from '../components/charts/FacilityDetailModal'
 import { HourlyFacilityGrid } from '../components/charts/HourlyFacilityGrid'
 import { HourlyProfileChart } from '../components/charts/HourlyProfileChart'
 import type { SystemwideSummary } from '../components/charts/YoYDailyChart'
@@ -71,6 +71,20 @@ export default function HourlyProfilesView() {
     { enabled: hasValidPeriod },
   )
 
+  const selectedGroupRows = useMemo(
+    () => selectedGroup
+      ? groupTimeData.filter((row) => row.detection_group === selectedGroup)
+      : [],
+    [groupTimeData, selectedGroup],
+  )
+
+  const selectedGroupSummary = useMemo(
+    () => selectedGroup
+      ? groupAggData.find((row) => row.detection_group === selectedGroup) ?? null
+      : null,
+    [groupAggData, selectedGroup],
+  )
+
   // -------------------------------------------------------------------------
   // Class breakdown drawer — only fetches when a group is selected
   // -------------------------------------------------------------------------
@@ -132,13 +146,17 @@ export default function HourlyProfilesView() {
         </section>
       </div>
 
-      <ClassBreakdownDrawer
+      <FacilityDetailModal
         mode="hourly"
         detectionGroup={selectedGroup}
-        timeData={classTimeData}
-        aggData={classAggData}
-        isLoading={classLoading}
-        error={classError}
+        groupRows={selectedGroupRows}
+        groupSummary={selectedGroupSummary}
+        isGroupLoading={groupLoading}
+        groupError={groupError}
+        classRows={classTimeData}
+        classAggRows={classAggData}
+        isClassLoading={classLoading}
+        classError={classError}
         onClose={() => setSelectedGroup(null)}
       />
     </div>
