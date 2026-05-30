@@ -1,4 +1,6 @@
+import { type ReactNode, useMemo } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
+import { comparablePeriod, toISODate } from '../lib/alignment'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
 const PRESETS: { value: PeriodPreset; label: string }[] = [
@@ -51,7 +53,7 @@ function SegmentedControl<T extends string>({
   )
 }
 
-function FilterLabel({ children }: { children: React.ReactNode }) {
+function FilterLabel({ children }: { children: ReactNode }) {
   return (
     <span className="eyebrow">
       {children}
@@ -61,6 +63,26 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
 
 export default function FilterBar({ showDayType = false }: { showDayType?: boolean }) {
   const [state, setState] = useUrlState()
+  const today = useMemo(() => new Date(), [])
+
+  function handlePresetChange(preset: PeriodPreset) {
+    if (preset !== 'custom') {
+      setState({ preset })
+      return
+    }
+
+    if (state.customStart && state.customEnd) {
+      setState({ preset })
+      return
+    }
+
+    const defaultPeriod = comparablePeriod(today, 'last_week')
+    setState({
+      preset,
+      customStart: toISODate(defaultPeriod.current[0]),
+      customEnd: toISODate(defaultPeriod.current[1]),
+    })
+  }
 
   return (
     <div className="bg-white border border-ink-900 px-6 py-5">
@@ -71,7 +93,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           <SegmentedControl
             options={PRESETS}
             value={state.preset}
-            onChange={(preset) => setState({ preset })}
+            onChange={handlePresetChange}
           />
         </div>
 

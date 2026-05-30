@@ -6,6 +6,10 @@ interface QueryState<T> {
   error: Error | null
 }
 
+interface QueryOptions {
+  enabled?: boolean
+}
+
 /**
  * Run an async query function whenever `deps` change.
  * Pass a function from `src/lib/queries.ts` — never construct SQL here.
@@ -16,10 +20,12 @@ interface QueryState<T> {
 export function useDuckQuery<T>(
   fn: () => Promise<T[]>,
   deps: DependencyList,
+  options: QueryOptions = {},
 ): QueryState<T> {
+  const enabled = options.enabled ?? true
   const [state, setState] = useState<QueryState<T>>({
     data: [],
-    isLoading: true,
+    isLoading: enabled,
     error: null,
   })
 
@@ -29,6 +35,14 @@ export function useDuckQuery<T>(
 
   useEffect(() => {
     let cancelled = false
+
+    if (!enabled) {
+      setState({ data: [], isLoading: false, error: null })
+      return () => {
+        cancelled = true
+      }
+    }
+
     setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
     fnRef.current()
@@ -44,7 +58,7 @@ export function useDuckQuery<T>(
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [...deps, enabled])
 
   return state
 }

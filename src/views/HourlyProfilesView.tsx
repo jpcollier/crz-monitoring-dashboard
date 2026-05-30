@@ -6,7 +6,7 @@ import { HourlyProfileChart } from '../components/charts/HourlyProfileChart'
 import type { SystemwideSummary } from '../components/charts/YoYDailyChart'
 import { useDuckQuery } from '../hooks/useDuckQuery'
 import { useUrlState } from '../hooks/useUrlState'
-import { comparablePeriod, toISODate } from '../lib/alignment'
+import { periodFromFilter, toISODate } from '../lib/alignment'
 import {
   queryClassSummary,
   queryGroupSummary,
@@ -23,19 +23,16 @@ export default function HourlyProfilesView() {
   // today is fixed for the session — changes on next page load
   const today = useMemo(() => new Date(), [])
 
-  const customRange = useMemo<[Date, Date] | undefined>(() => {
-    if (state.preset !== 'custom' || !state.customStart || !state.customEnd) return undefined
-    return [new Date(state.customStart), new Date(state.customEnd)]
-  }, [state.preset, state.customStart, state.customEnd])
-
-  const period = useMemo(
-    () => comparablePeriod(today, state.preset, customRange),
-    [today, state.preset, customRange],
+  const periodResult = useMemo(
+    () => periodFromFilter(today, state),
+    [today, state],
   )
+  const { period, error: filterError } = periodResult
+  const hasValidPeriod = Boolean(period)
 
   // Stable dependency keys so useDuckQuery re-fetches exactly when filters change.
-  const cs = toISODate(period.current[0])
-  const ce = toISODate(period.current[1])
+  const cs = period ? toISODate(period.current[0]) : ''
+  const ce = period ? toISODate(period.current[1]) : ''
   const { dayType, entryType } = state
   const periodDeps = [cs, ce, entryType, dayType] as const
 
@@ -43,14 +40,16 @@ export default function HourlyProfilesView() {
   // Systemwide hourly profile chart
   // -------------------------------------------------------------------------
   const { data: hourlyData, isLoading: hourlyLoading, error: hourlyError } = useDuckQuery(
-    () => queryHourlyYoY(period, entryType, dayType),
+    () => period ? queryHourlyYoY(period, entryType, dayType) : Promise.resolve([]),
     periodDeps,
+    { enabled: hasValidPeriod },
   )
 
   // Reuse the daily summary for the ChangeBadge — same aggregate totals.
   const { data: summaryRows } = useDuckQuery(
-    () => querySystemwideSummary(period, entryType, dayType),
+    () => period ? querySystemwideSummary(period, entryType, dayType) : Promise.resolve([]),
     periodDeps,
+    { enabled: hasValidPeriod },
   )
   const summary: SystemwideSummary | null = summaryRows.length
     ? (summaryRows[0] as SystemwideSummary)
@@ -60,14 +59,16 @@ export default function HourlyProfilesView() {
   // Facility grid
   // -------------------------------------------------------------------------
   const { data: groupTimeData, isLoading: groupLoading, error: groupError } = useDuckQuery(
-    () => queryHourlyByGroup(period, entryType, dayType),
+    () => period ? queryHourlyByGroup(period, entryType, dayType) : Promise.resolve([]),
     periodDeps,
+    { enabled: hasValidPeriod },
   )
 
   // Reuse daily group summaries for the per-card ChangeBadges.
   const { data: groupAggData } = useDuckQuery(
-    () => queryGroupSummary(period, entryType, dayType),
+    () => period ? queryGroupSummary(period, entryType, dayType) : Promise.resolve([]),
     periodDeps,
+    { enabled: hasValidPeriod },
   )
 
   // -------------------------------------------------------------------------
@@ -77,23 +78,31 @@ export default function HourlyProfilesView() {
 
   const { data: classTimeData, isLoading: classLoading, error: classError } = useDuckQuery(
     () =>
-      selectedGroup
+      selectedGroup && period
         ? queryHourlyByClass(selectedGroup, period, entryType, dayType)
         : Promise.resolve([]),
     drawerDeps,
+    { enabled: hasValidPeriod && Boolean(selectedGroup) },
   )
 
   const { data: classAggData } = useDuckQuery(
     () =>
-      selectedGroup
+      selectedGroup && period
         ? queryClassSummary(selectedGroup, period, entryType, dayType)
         : Promise.resolve([]),
     drawerDeps,
+    { enabled: hasValidPeriod && Boolean(selectedGroup) },
   )
 
   return (
     <div>
       <FilterBar showDayType />
+
+      {filterError && (
+        <div className="mt-5 border border-signal-500 bg-white px-4 py-3 text-sm text-signal-600">
+          {filterError}
+        </div>
+      )}
 
       <div className="mt-6 space-y-8">
         <section className="bg-white border border-ink-900">

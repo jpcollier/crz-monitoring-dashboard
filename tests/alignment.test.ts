@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { comparablePeriod, shift364, toISODate } from '../src/lib/alignment'
+import {
+  comparablePeriod,
+  normalizeDateRange,
+  parseISODateOnly,
+  periodFromFilter,
+  shift364,
+  toISODate,
+} from '../src/lib/alignment'
 
 function d(iso: string): Date {
   const [y, m, day] = iso.split('-').map(Number)
@@ -80,5 +87,69 @@ describe('comparablePeriod', () => {
 
   it('throws if custom preset is used without a range', () => {
     expect(() => comparablePeriod(d('2026-05-24'), 'custom')).toThrow()
+  })
+})
+
+describe('parseISODateOnly', () => {
+  it('accepts a valid YYYY-MM-DD date', () => {
+    const parsed = parseISODateOnly('2026-05-24')
+    expect(parsed).not.toBeNull()
+    expect(toISODate(parsed!)).toBe('2026-05-24')
+  })
+
+  it('rejects malformed date strings', () => {
+    expect(parseISODateOnly('2026-5-24')).toBeNull()
+    expect(parseISODateOnly('05/24/2026')).toBeNull()
+  })
+
+  it('rejects impossible calendar dates', () => {
+    expect(parseISODateOnly('2026-02-31')).toBeNull()
+    expect(parseISODateOnly('2026-13-01')).toBeNull()
+  })
+})
+
+describe('normalizeDateRange', () => {
+  it('requires both boundaries', () => {
+    expect(normalizeDateRange('2026-05-01', undefined).error).toBe('Choose both a start and end date.')
+    expect(normalizeDateRange(undefined, '2026-05-07').error).toBe('Choose both a start and end date.')
+  })
+
+  it('rejects start dates after end dates', () => {
+    expect(normalizeDateRange('2026-05-08', '2026-05-07').error).toBe(
+      'Start date must be on or before end date.',
+    )
+  })
+
+  it('returns a parsed valid range', () => {
+    const result = normalizeDateRange('2026-05-01', '2026-05-07')
+    expect(result.error).toBeUndefined()
+    expect(result.range?.map(toISODate)).toEqual(['2026-05-01', '2026-05-07'])
+  })
+})
+
+describe('periodFromFilter', () => {
+  it('returns validation errors for incomplete custom filters instead of throwing', () => {
+    const result = periodFromFilter(d('2026-05-24'), {
+      preset: 'custom',
+      entryType: 'CRZ',
+      dayType: 'all',
+    })
+
+    expect(result.period).toBeUndefined()
+    expect(result.error).toBe('Choose both a start and end date.')
+  })
+
+  it('maps valid custom filters to comparable current and prior windows', () => {
+    const result = periodFromFilter(d('2026-05-24'), {
+      preset: 'custom',
+      entryType: 'CRZ',
+      dayType: 'all',
+      customStart: '2026-04-01',
+      customEnd: '2026-04-30',
+    })
+
+    expect(result.error).toBeUndefined()
+    expect(result.period?.current.map(toISODate)).toEqual(['2026-04-01', '2026-04-30'])
+    expect(result.period?.prior.map(toISODate)).toEqual(['2025-04-02', '2025-05-01'])
   })
 })

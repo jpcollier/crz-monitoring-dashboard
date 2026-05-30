@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { parseISODateOnly } from '../lib/alignment'
 import type { DayType, EntryType, FilterState, PeriodPreset } from '../lib/types'
 
 const VALID_PRESETS = new Set<PeriodPreset>(['ytd', 'last_month', 'last_week', 'custom'])
@@ -26,7 +27,7 @@ function parseDayType(raw: string | null): DayType {
 
 function parseISODate(raw: string | null): string | undefined {
   if (!raw) return undefined
-  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined
+  return parseISODateOnly(raw) ? raw : undefined
 }
 
 export function useUrlState(): [FilterState, (next: Partial<FilterState>) => void] {
