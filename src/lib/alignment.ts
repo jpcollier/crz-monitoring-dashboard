@@ -1,12 +1,19 @@
 import type { FilterState, PeriodPreset } from './types'
 
+export type DateRange = [Date, Date]
+
+export interface DataWindow {
+  currentStart: Date
+  currentEnd: Date
+}
+
 export interface ComparablePeriod {
-  current: [Date, Date]
-  prior: [Date, Date]
+  current: DateRange[]
+  prior: DateRange[]
 }
 
 export interface DateRangeValidation {
-  range?: [Date, Date]
+  range?: DateRange
   error?: string
 }
 
@@ -15,64 +22,54 @@ export interface PeriodValidation {
   error?: string
 }
 
-/** Shift a date backward by exactly 364 days (52 × 7 — preserves weekday). */
+/** Shift a date backward by exactly 364 days (52 x 7, preserves weekday). */
 export function shift364(date: Date): Date {
   const d = new Date(date)
   d.setDate(d.getDate() - 364)
   return d
 }
 
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = startOfDay(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+function maxDate(a: Date, b: Date): Date {
+  return a > b ? a : b
+}
+
+function periodFromCurrent(current: DateRange[]): ComparablePeriod {
+  return {
+    current,
+    prior: current.map(([start, end]) => [shift364(start), shift364(end)]),
+  }
+}
+
 /**
- * Return the [start, end] windows for the current year and the comparable
- * prior-year period, given a preset and today's date.
+ * Return the current-year windows and the comparable prior-year windows.
  *
- * All dates are local-time midnight (time component is 00:00:00).
- * The `prior` window is always `current` shifted back 364 days.
+ * The `prior` windows are always each `current` range shifted back 364 days.
+ * Presets are anchored to the latest available data date, not the browser date.
  */
 export function comparablePeriod(
-  today: Date,
+  dataWindow: DataWindow,
   preset: PeriodPreset,
-  custom?: [Date, Date],
 ): ComparablePeriod {
-  const currentYear = today.getFullYear()
-
-  let currentStart: Date
-  let currentEnd: Date
+  const start = startOfDay(dataWindow.currentStart)
+  const end = startOfDay(dataWindow.currentEnd)
 
   switch (preset) {
-    case 'ytd': {
-      currentStart = new Date(currentYear, 0, 1)
-      currentEnd = today
-      break
-    }
-    case 'last_month': {
-      // Full calendar month ending at the start of the current month.
-      const firstOfThisMonth = new Date(currentYear, today.getMonth(), 1)
-      currentEnd = new Date(firstOfThisMonth.getTime() - 1) // last millisecond of prev month
-      currentEnd = new Date(currentEnd.getFullYear(), currentEnd.getMonth(), currentEnd.getDate())
-      currentStart = new Date(currentEnd.getFullYear(), currentEnd.getMonth(), 1)
-      break
-    }
-    case 'last_week': {
-      // The 7 days ending yesterday.
-      const yesterday = new Date(today)
-      yesterday.setDate(yesterday.getDate() - 1)
-      const weekStart = new Date(yesterday)
-      weekStart.setDate(weekStart.getDate() - 6)
-      currentStart = weekStart
-      currentEnd = yesterday
-      break
-    }
-    case 'custom': {
-      if (!custom) throw new Error('custom preset requires a date range')
-      ;[currentStart, currentEnd] = custom
-      break
-    }
-  }
-
-  return {
-    current: [currentStart, currentEnd],
-    prior: [shift364(currentStart), shift364(currentEnd)],
+    case 'ytd':
+      return periodFromCurrent([[start, end]])
+    case 'last_30_days':
+      return periodFromCurrent([[maxDate(start, addDays(end, -29)), end]])
+    case 'last_90_days':
+      return periodFromCurrent([[maxDate(start, addDays(end, -89)), end]])
   }
 }
 
@@ -120,13 +117,13 @@ export function normalizeDateRange(
   return { range: [startDate, endDate] }
 }
 
-export function periodFromFilter(today: Date, state: FilterState): PeriodValidation {
-  if (state.preset !== 'custom') {
-    return { period: comparablePeriod(today, state.preset) }
-  }
+export function periodFromFilter(dataWindow: DataWindow, state: FilterState): PeriodValidation {
+  return { period: comparablePeriod(dataWindow, state.preset) }
+}
 
-  const { range, error } = normalizeDateRange(state.customStart, state.customEnd)
-  if (!range) return { error }
+export function periodKey(period: ComparablePeriod): string {
+  const encode = (ranges: DateRange[]) =>
+    ranges.map(([start, end]) => `${toISODate(start)}:${toISODate(end)}`).join(',')
 
-  return { period: comparablePeriod(today, 'custom', range) }
+  return `${encode(period.current)}|${encode(period.prior)}`
 }

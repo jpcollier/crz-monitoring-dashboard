@@ -61,7 +61,7 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
     const parsed = rows.map(r => ({ ...r, date: new Date(r.plot_date) }))
 
     // Adaptive ticks: narrow cards can't fit many labels, so cap at 4 for short
-    // ranges and fall back to monthly for YTD/custom.
+    // ranges and fall back to monthly for longer periods.
     const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     const fmtMonthDay = (d: Date) => `${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`
     const fmtMonth    = (d: Date) => MONTHS_SHORT[d.getUTCMonth()]

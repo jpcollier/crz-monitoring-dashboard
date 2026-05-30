@@ -1,13 +1,12 @@
-import { type ReactNode, useMemo } from 'react'
+import { type ReactNode } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
-import { comparablePeriod, toISODate } from '../lib/alignment'
+import { DATA_WINDOW } from '../lib/metadata'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
 const PRESETS: { value: PeriodPreset; label: string }[] = [
-  { value: 'ytd',        label: 'Year to date' },
-  { value: 'last_month', label: 'Last month' },
-  { value: 'last_week',  label: 'Last week' },
-  { value: 'custom',     label: 'Custom' },
+  { value: 'ytd',          label: 'Year to date' },
+  { value: 'last_90_days', label: 'Past 90 days' },
+  { value: 'last_30_days', label: 'Past 30 days' },
 ]
 
 const ENTRY_TYPES: { value: EntryType; label: string }[] = [
@@ -62,27 +61,7 @@ function FilterLabel({ children }: { children: ReactNode }) {
 }
 
 export default function FilterBar({ showDayType = false }: { showDayType?: boolean }) {
-  const [state, setState] = useUrlState()
-  const today = useMemo(() => new Date(), [])
-
-  function handlePresetChange(preset: PeriodPreset) {
-    if (preset !== 'custom') {
-      setState({ preset })
-      return
-    }
-
-    if (state.customStart && state.customEnd) {
-      setState({ preset })
-      return
-    }
-
-    const defaultPeriod = comparablePeriod(today, 'last_week')
-    setState({
-      preset,
-      customStart: toISODate(defaultPeriod.current[0]),
-      customEnd: toISODate(defaultPeriod.current[1]),
-    })
-  }
+  const [state, setState] = useUrlState(DATA_WINDOW)
 
   return (
     <div className="bg-white border border-ink-900 px-6 py-5">
@@ -93,36 +72,9 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           <SegmentedControl
             options={PRESETS}
             value={state.preset}
-            onChange={handlePresetChange}
+            onChange={(preset) => setState({ preset })}
           />
         </div>
-
-        {state.preset === 'custom' && (
-          <div className="flex flex-col gap-2">
-            <FilterLabel>Date range</FilterLabel>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={state.customStart ?? ''}
-                onChange={(e) => setState({ customStart: e.target.value })}
-                className="border border-ink-900 px-3 py-2 text-sm text-ink-900 bg-white font-mono
-                           focus:outline-none focus:ring-2 focus:ring-ink-900/20
-                           transition-colors"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, borderRadius: 2 }}
-              />
-              <span className="text-ink-400 select-none">—</span>
-              <input
-                type="date"
-                value={state.customEnd ?? ''}
-                onChange={(e) => setState({ customEnd: e.target.value })}
-                className="border border-ink-900 px-3 py-2 text-sm text-ink-900 bg-white
-                           focus:outline-none focus:ring-2 focus:ring-ink-900/20
-                           transition-colors"
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 13, borderRadius: 2 }}
-              />
-            </div>
-          </div>
-        )}
 
         {showDayType && (
           <>

@@ -6,7 +6,8 @@ import { HourlyProfileChart } from '../components/charts/HourlyProfileChart'
 import type { SystemwideSummary } from '../components/charts/YoYDailyChart'
 import { useDuckQuery } from '../hooks/useDuckQuery'
 import { useUrlState } from '../hooks/useUrlState'
-import { periodFromFilter, toISODate } from '../lib/alignment'
+import { periodFromFilter, periodKey } from '../lib/alignment'
+import { DATA_WINDOW } from '../lib/metadata'
 import {
   queryClassSummary,
   queryGroupSummary,
@@ -20,21 +21,17 @@ export default function HourlyProfilesView() {
   const [state] = useUrlState()
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
 
-  // today is fixed for the session — changes on next page load
-  const today = useMemo(() => new Date(), [])
-
   const periodResult = useMemo(
-    () => periodFromFilter(today, state),
-    [today, state],
+    () => periodFromFilter(DATA_WINDOW, state),
+    [state],
   )
   const { period, error: filterError } = periodResult
   const hasValidPeriod = Boolean(period)
 
   // Stable dependency keys so useDuckQuery re-fetches exactly when filters change.
-  const cs = period ? toISODate(period.current[0]) : ''
-  const ce = period ? toISODate(period.current[1]) : ''
+  const rangeKey = period ? periodKey(period) : ''
   const { dayType, entryType } = state
-  const periodDeps = [cs, ce, entryType, dayType] as const
+  const periodDeps = [rangeKey, entryType, dayType] as const
 
   // -------------------------------------------------------------------------
   // Systemwide hourly profile chart
@@ -74,7 +71,7 @@ export default function HourlyProfilesView() {
   // -------------------------------------------------------------------------
   // Class breakdown drawer — only fetches when a group is selected
   // -------------------------------------------------------------------------
-  const drawerDeps = [selectedGroup, cs, ce, entryType, dayType] as const
+  const drawerDeps = [selectedGroup, rangeKey, entryType, dayType] as const
 
   const { data: classTimeData, isLoading: classLoading, error: classError } = useDuckQuery(
     () =>
