@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseUrlFilterState } from '../src/hooks/useUrlState'
 import {
   comparablePeriod,
   normalizeDateRange,
@@ -7,10 +8,19 @@ import {
   shift364,
   toISODate,
 } from '../src/lib/alignment'
+import type { DataWindow } from '../src/lib/alignment'
 
 function d(iso: string): Date {
   const [y, m, day] = iso.split('-').map(Number)
   return new Date(y, m! - 1, day)
+}
+
+function window(start: string, end: string): DataWindow {
+  return { currentStart: d(start), currentEnd: d(end) }
+}
+
+function rangesToISO(ranges: [Date, Date][]): string[][] {
+  return ranges.map(([start, end]) => [toISODate(start), toISODate(end)])
 }
 
 describe('shift364', () => {
@@ -27,67 +37,36 @@ describe('shift364', () => {
 })
 
 describe('comparablePeriod', () => {
-  it('ytd: current window is Jan 1 to today', () => {
-    const today = d('2026-05-24')
-    const { current, prior } = comparablePeriod(today, 'ytd')
-    expect(toISODate(current[0])).toBe('2026-01-01')
-    expect(toISODate(current[1])).toBe('2026-05-24')
+  it('ytd: current window is Jan 1 to latest available data date', () => {
+    const { current, prior } = comparablePeriod(window('2026-01-01', '2026-05-24'), 'ytd')
+    expect(rangesToISO(current)).toEqual([['2026-01-01', '2026-05-24']])
+    expect(rangesToISO(prior)).toEqual([['2025-01-02', '2025-05-25']])
   })
 
-  it('ytd: prior window is current shifted back 364 days', () => {
-    const today = d('2026-05-24')
-    const { prior } = comparablePeriod(today, 'ytd')
-    expect(toISODate(prior[0])).toBe('2025-01-02') // 2026-01-01 - 364
-    expect(toISODate(prior[1])).toBe('2025-05-25') // 2026-05-24 - 364
+  it('last_30_days: rolling 30-day window anchored on latest available data date', () => {
+    const { current, prior } = comparablePeriod(window('2026-01-01', '2026-05-24'), 'last_30_days')
+    expect(rangesToISO(current)).toEqual([['2026-04-25', '2026-05-24']])
+    expect(rangesToISO(prior)).toEqual([['2025-04-26', '2025-05-25']])
   })
 
-  it('last_week: 7-day window ending yesterday', () => {
-    const today = d('2026-05-24')
-    const { current } = comparablePeriod(today, 'last_week')
-    expect(toISODate(current[1])).toBe('2026-05-23') // yesterday
-    expect(toISODate(current[0])).toBe('2026-05-17') // 6 days before yesterday
+  it('last_90_days: rolling 90-day window anchored on latest available data date', () => {
+    const { current, prior } = comparablePeriod(window('2026-01-01', '2026-05-24'), 'last_90_days')
+    expect(rangesToISO(current)).toEqual([['2026-02-24', '2026-05-24']])
+    expect(rangesToISO(prior)).toEqual([['2025-02-25', '2025-05-25']])
   })
 
-  it('last_week: prior window is shifted 364 days back', () => {
-    const today = d('2026-05-24')
-    const { prior } = comparablePeriod(today, 'last_week')
-    // 2026-05-17 - 364 = 2025-05-18
-    expect(toISODate(prior[0])).toBe('2025-05-18')
-    // 2026-05-23 - 364 = 2025-05-24
-    expect(toISODate(prior[1])).toBe('2025-05-24')
-  })
-
-  it('last_month: prior month window', () => {
-    const today = d('2026-05-24')
-    const { current } = comparablePeriod(today, 'last_month')
-    expect(toISODate(current[0])).toBe('2026-04-01')
-    expect(toISODate(current[1])).toBe('2026-04-30')
-  })
-
-  it('custom range passthrough', () => {
-    const today = d('2026-05-24')
-    const { current, prior } = comparablePeriod(today, 'custom', [d('2026-03-01'), d('2026-03-31')])
-    expect(toISODate(current[0])).toBe('2026-03-01')
-    expect(toISODate(current[1])).toBe('2026-03-31')
-    // 2026-03-01 - 364 = 2025-03-02
-    expect(toISODate(prior[0])).toBe('2025-03-02')
-    expect(toISODate(prior[1])).toBe('2025-04-01')
+  it('clamps rolling windows to the available current-year start', () => {
+    const { current } = comparablePeriod(window('2026-01-10', '2026-01-20'), 'last_30_days')
+    expect(rangesToISO(current)).toEqual([['2026-01-10', '2026-01-20']])
   })
 
   it('Jan 1-4 2026 edge case: prior window starts before CRZ launch (Jan 5, 2025)', () => {
-    const today = d('2026-01-03')
-    const { current, prior } = comparablePeriod(today, 'ytd')
-    expect(toISODate(current[0])).toBe('2026-01-01')
-    // prior start: 2026-01-01 - 364 = 2025-01-02 (before CRZ launch Jan 5, 2025)
-    expect(toISODate(prior[0])).toBe('2025-01-02')
-    // Callers are responsible for handling the absence of prior data
-    // for dates before 2025-01-05 — this test confirms the math is correct.
-    expect(prior[0] < d('2025-01-05')).toBe(true)
+    const { current, prior } = comparablePeriod(window('2026-01-01', '2026-01-03'), 'ytd')
+    expect(rangesToISO(current)).toEqual([['2026-01-01', '2026-01-03']])
+    expect(rangesToISO(prior)).toEqual([['2025-01-02', '2025-01-04']])
+    expect(prior[0]![0] < d('2025-01-05')).toBe(true)
   })
 
-  it('throws if custom preset is used without a range', () => {
-    expect(() => comparablePeriod(d('2026-05-24'), 'custom')).toThrow()
-  })
 })
 
 describe('parseISODateOnly', () => {
@@ -128,28 +107,35 @@ describe('normalizeDateRange', () => {
 })
 
 describe('periodFromFilter', () => {
-  it('returns validation errors for incomplete custom filters instead of throwing', () => {
-    const result = periodFromFilter(d('2026-05-24'), {
-      preset: 'custom',
+  it('maps the ytd filter to the comparable period', () => {
+    const result = periodFromFilter(window('2026-01-01', '2026-05-24'), {
+      preset: 'ytd',
       entryType: 'CRZ',
       dayType: 'all',
-    })
-
-    expect(result.period).toBeUndefined()
-    expect(result.error).toBe('Choose both a start and end date.')
-  })
-
-  it('maps valid custom filters to comparable current and prior windows', () => {
-    const result = periodFromFilter(d('2026-05-24'), {
-      preset: 'custom',
-      entryType: 'CRZ',
-      dayType: 'all',
-      customStart: '2026-04-01',
-      customEnd: '2026-04-30',
     })
 
     expect(result.error).toBeUndefined()
-    expect(result.period?.current.map(toISODate)).toEqual(['2026-04-01', '2026-04-30'])
-    expect(result.period?.prior.map(toISODate)).toEqual(['2025-04-02', '2025-05-01'])
+    expect(rangesToISO(result.period!.current)).toEqual([['2026-01-01', '2026-05-24']])
+    expect(rangesToISO(result.period!.prior)).toEqual([['2025-01-02', '2025-05-25']])
+  })
+})
+
+describe('parseUrlFilterState', () => {
+  it('falls back to ytd for old custom month URLs', () => {
+    const state = parseUrlFilterState(
+      new URLSearchParams('preset=custom&months=2026-01,2026-03&entryType=Combined&dayType=weekday'),
+      window('2026-01-01', '2026-05-24'),
+    )
+
+    expect(state).toEqual({
+      preset: 'ytd',
+      entryType: 'Combined',
+      dayType: 'weekday',
+    })
+  })
+
+  it('maps legacy preset URLs to the new rolling presets', () => {
+    expect(parseUrlFilterState(new URLSearchParams('preset=last_week')).preset).toBe('last_30_days')
+    expect(parseUrlFilterState(new URLSearchParams('preset=last_month')).preset).toBe('last_90_days')
   })
 })

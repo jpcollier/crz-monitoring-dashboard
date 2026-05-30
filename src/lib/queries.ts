@@ -12,10 +12,22 @@ function etClause(entryType: EntryType): string {
 }
 
 // All dates arriving here come from alignment.ts pure functions, not user strings.
+function rangeWhere(ranges: ComparablePeriod['current']): string {
+  return ranges
+    .map(([start, end]) => `(date BETWEEN '${toISODate(start)}' AND '${toISODate(end)}')`)
+    .join(' OR ')
+}
+
 function periodWhere(period: ComparablePeriod): string {
-  const [cs, ce] = period.current.map(toISODate)
-  const [ps, pe] = period.prior.map(toISODate)
-  return `(date BETWEEN '${cs}' AND '${ce}') OR (date BETWEEN '${ps}' AND '${pe}')`
+  return `(${rangeWhere(period.current)}) OR (${rangeWhere(period.prior)})`
+}
+
+function currentWhere(period: ComparablePeriod): string {
+  return rangeWhere(period.current)
+}
+
+function priorWhere(period: ComparablePeriod): string {
+  return rangeWhere(period.prior)
 }
 
 // Optional hourly-profile day filter. DuckDB strftime('%w') returns 0 for
@@ -120,18 +132,18 @@ export async function querySystemwideSummary(
   entryType: EntryType,
   dayType: DayType = 'all',
 ): Promise<{ current_entries: number; prior_entries: number; pct_change: number }[]> {
-  const [cs, ce] = period.current.map(toISODate)
-  const [ps, pe] = period.prior.map(toISODate)
+  const current = currentWhere(period)
+  const prior = priorWhere(period)
   return query(`
     SELECT
-      CAST(SUM(CASE WHEN date BETWEEN '${cs}' AND '${ce}' THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
-      CAST(SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
+      CAST(SUM(CASE WHEN ${current} THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
+      CAST(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
       CASE
-        WHEN SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) = 0 THEN NULL
+        WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
         ELSE ROUND(
-          (SUM(CASE WHEN date BETWEEN '${cs}' AND '${ce}' THEN entries ELSE 0 END) -
-           SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END))
-          / SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) * 100,
+          (SUM(CASE WHEN ${current} THEN entries ELSE 0 END) -
+           SUM(CASE WHEN ${prior} THEN entries ELSE 0 END))
+          / SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) * 100,
           1
         )
       END AS pct_change
@@ -167,19 +179,19 @@ export async function queryGroupSummary(
   entryType: EntryType,
   dayType: DayType = 'all',
 ): Promise<GroupAggRow[]> {
-  const [cs, ce] = period.current.map(toISODate)
-  const [ps, pe] = period.prior.map(toISODate)
+  const current = currentWhere(period)
+  const prior = priorWhere(period)
   return query<GroupAggRow>(`
     SELECT
       detection_group,
-      CAST(SUM(CASE WHEN date BETWEEN '${cs}' AND '${ce}' THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
-      CAST(SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
+      CAST(SUM(CASE WHEN ${current} THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
+      CAST(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
       CASE
-        WHEN SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) = 0 THEN NULL
+        WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
         ELSE ROUND(
-          (SUM(CASE WHEN date BETWEEN '${cs}' AND '${ce}' THEN entries ELSE 0 END) -
-           SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END))
-          / SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) * 100,
+          (SUM(CASE WHEN ${current} THEN entries ELSE 0 END) -
+           SUM(CASE WHEN ${prior} THEN entries ELSE 0 END))
+          / SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) * 100,
           1
         )
       END AS pct_change
@@ -220,19 +232,19 @@ export async function queryClassSummary(
   entryType: EntryType,
   dayType: DayType = 'all',
 ): Promise<ClassAggRow[]> {
-  const [cs, ce] = period.current.map(toISODate)
-  const [ps, pe] = period.prior.map(toISODate)
+  const current = currentWhere(period)
+  const prior = priorWhere(period)
   return query<ClassAggRow>(`
     SELECT
       vehicle_class,
-      CAST(SUM(CASE WHEN date BETWEEN '${cs}' AND '${ce}' THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
-      CAST(SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
+      CAST(SUM(CASE WHEN ${current} THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
+      CAST(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
       CASE
-        WHEN SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) = 0 THEN NULL
+        WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
         ELSE ROUND(
-          (SUM(CASE WHEN date BETWEEN '${cs}' AND '${ce}' THEN entries ELSE 0 END) -
-           SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END))
-          / SUM(CASE WHEN date BETWEEN '${ps}' AND '${pe}' THEN entries ELSE 0 END) * 100,
+          (SUM(CASE WHEN ${current} THEN entries ELSE 0 END) -
+           SUM(CASE WHEN ${prior} THEN entries ELSE 0 END))
+          / SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) * 100,
           1
         )
       END AS pct_change

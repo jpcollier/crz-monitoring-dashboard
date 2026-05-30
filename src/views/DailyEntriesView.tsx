@@ -7,7 +7,8 @@ import { YoYDailyChart } from '../components/charts/YoYDailyChart'
 import type { SystemwideSummary } from '../components/charts/YoYDailyChart'
 import { useDuckQuery } from '../hooks/useDuckQuery'
 import { useUrlState } from '../hooks/useUrlState'
-import { periodFromFilter, toISODate } from '../lib/alignment'
+import { periodFromFilter, periodKey } from '../lib/alignment'
+import { DATA_WINDOW } from '../lib/metadata'
 import {
   queryClassSummary,
   queryDailyByClass,
@@ -43,21 +44,17 @@ export default function DailyEntriesView() {
   const [state] = useUrlState()
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
 
-  // today is fixed for the session — changes on next page load
-  const today = useMemo(() => new Date(), [])
-
   const periodResult = useMemo(
-    () => periodFromFilter(today, state),
-    [today, state],
+    () => periodFromFilter(DATA_WINDOW, state),
+    [state],
   )
   const { period, error: filterError } = periodResult
   const hasValidPeriod = Boolean(period)
 
   // Stable dependency keys so useDuckQuery re-fetches exactly when filters change.
-  const cs = period ? toISODate(period.current[0]) : ''
-  const ce = period ? toISODate(period.current[1]) : ''
+  const rangeKey = period ? periodKey(period) : ''
   const { entryType } = state
-  const periodDeps = [cs, ce, entryType] as const
+  const periodDeps = [rangeKey, entryType] as const
 
   // -------------------------------------------------------------------------
   // Systemwide YoY chart
@@ -77,7 +74,7 @@ export default function DailyEntriesView() {
     ? (summaryRows[0] as SystemwideSummary)
     : null
 
-  // YTD daily average: 2026 total ÷ number of distinct 2026 dates in the period
+  // Period daily average: 2026 total divided by distinct 2026 dates in the period.
   const distinct2026Dates = useMemo(
     () => new Set(yoyData.filter(r => r.year === 2026).map(r => r.plot_date)).size,
     [yoyData],
@@ -103,7 +100,7 @@ export default function DailyEntriesView() {
   // -------------------------------------------------------------------------
   // Class breakdown drawer — only fetches when a group is selected
   // -------------------------------------------------------------------------
-  const drawerDeps = [selectedGroup, cs, ce, entryType] as const
+  const drawerDeps = [selectedGroup, rangeKey, entryType] as const
 
   const { data: classTimeData, isLoading: classLoading, error: classError } = useDuckQuery(
     () =>
@@ -138,7 +135,7 @@ export default function DailyEntriesView() {
       {/* Summary stat row */}
       <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-px bg-ink-900 border border-ink-900">
         <StatCard
-          label="YTD daily avg"
+          label="Daily avg"
           value={dailyAvg !== null ? fmtStat(dailyAvg) : '—'}
           isLoading={statsLoading}
         />
