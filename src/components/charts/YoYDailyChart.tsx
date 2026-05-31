@@ -7,7 +7,7 @@ import {
   COLOR_2026,
   buildDailyHoverRows,
   chartHoverMarks,
-  fmtCount,
+  fmtAxisCount,
   formatHoverReadout,
   type DailyHoverRow,
   type HoverReadout as HoverInfo,
@@ -55,6 +55,7 @@ export interface YoYDailyChartProps {
 // ---------------------------------------------------------------------------
 
 const CHART_HEIGHT = 280
+const BADGE_HEADROOM_RATIO = 1.22
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,6 +64,11 @@ const CHART_HEIGHT = 280
 /** Build an annotated row list with Date objects parsed from plot_date strings. */
 function parseRows(data: DailyYoYRow[]) {
   return data.map((d) => ({ ...d, date: new Date(d.plot_date) }))
+}
+
+function paddedYDomain(rows: ReturnType<typeof parseRows>): [number, number] | undefined {
+  const maxEntries = Math.max(0, ...rows.map((row) => row.entries))
+  return maxEntries > 0 ? [0, maxEntries * BADGE_HEADROOM_RATIO] : undefined
 }
 
 // ---------------------------------------------------------------------------
@@ -91,18 +97,16 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
   // driven by identical x values, eliminating the independent-snap off-by-one.
   const wide = buildDailyHoverRows(parsed, (r) => r.entries)
 
-  const lastOf = (arr: typeof data2025) =>
-    arr.length ? [arr.reduce((a, b) => (a.date >= b.date ? a : b))] : []
-
   const times = parsed.map(d => d.date.getTime())
   const spanDays = times.length ? (Math.max(...times) - Math.min(...times)) / 864e5 : 0
   const { ticks, tickFormat } = xAxisForSpan(spanDays)
+  const yDomain = paddedYDomain(parsed)
 
   return Plot.plot({
     width,
     height: CHART_HEIGHT,
     marginLeft: 52,  // widest abbreviated label is "500K" ≈ 28px; give breathing room
-    marginRight: 48, // room for inline year labels
+    marginRight: 24,
     color: {
       domain: [2025, 2026],
       range: [COLOR_2025, COLOR_2026],
@@ -115,8 +119,10 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
       tickFormat,
     },
     y: {
+      domain: yDomain,
       label: 'Entries',
-      tickFormat: fmtCount,
+      ticks: 5,
+      tickFormat: fmtAxisCount,
       grid: '#ECE7D8',
     },
     marks: [
@@ -128,7 +134,7 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
         strokeWidth: 1,
         curve: 'monotone-x',
       }),
-      // Current-year line — blue, slightly thicker so it reads as primary
+      // Current-year line — red, slightly thicker so it reads as primary
       Plot.lineY(data2026, {
         x: 'date',
         y: 'entries',
@@ -136,32 +142,6 @@ function buildPlot(width: number, parsed: ReturnType<typeof parseRows>) {
         strokeWidth: 2,
         curve: 'monotone-x',
       }),
-      // Inline "2025" label at the rightmost point of the prior series
-      ...lastOf(data2025).map((row) =>
-        Plot.text([row], {
-          x: 'date',
-          y: 'entries',
-          text: () => '2025',
-          fill: COLOR_2025,
-          textAnchor: 'start',
-          dx: 4,
-          fontSize: 11,
-          fontWeight: 500,
-        }),
-      ),
-      // Inline "2026" label at the rightmost point of the current series
-      ...lastOf(data2026).map((row) =>
-        Plot.text([row], {
-          x: 'date',
-          y: 'entries',
-          text: () => '2026',
-          fill: COLOR_2026,
-          textAnchor: 'start',
-          dx: 4,
-          fontSize: 11,
-          fontWeight: 600,
-        }),
-      ),
       // Vertical rule + dots driven by one shared hover utility so all marks
       // snap to the same x position and follow the same year-color convention.
       ...chartHoverMarks(wide, 'date'),

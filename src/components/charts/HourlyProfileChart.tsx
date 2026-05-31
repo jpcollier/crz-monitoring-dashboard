@@ -8,6 +8,7 @@ import {
   COLOR_2026,
   buildHourlyHoverRows,
   chartHoverMarks,
+  fmtAxisCount,
   fmtCount,
   fmtHour,
   formatHoverReadout,
@@ -46,6 +47,12 @@ export interface HourlyProfileChartProps {
 // ---------------------------------------------------------------------------
 
 const CHART_HEIGHT = 280
+const BADGE_HEADROOM_RATIO = 1.22
+
+function paddedYDomain(data: HourlyYoYRow[]): [number, number] | undefined {
+  const maxEntries = Math.max(0, ...data.map((row) => row.avg_entries))
+  return maxEntries > 0 ? [0, maxEntries * BADGE_HEADROOM_RATIO] : undefined
+}
 
 /** Build and return a Plot SVG element. Caller owns appendChild / remove. */
 function buildPlot(width: number, data: HourlyYoYRow[]) {
@@ -53,17 +60,13 @@ function buildPlot(width: number, data: HourlyYoYRow[]) {
   const data2026 = data.filter((d) => d.year === 2026)
 
   const wide = buildHourlyHoverRows(data, (r) => r.avg_entries)
-
-  const lastOf = (arr: HourlyYoYRow[]) => {
-    const atHour23 = arr.filter((d) => d.hour === 23)
-    return atHour23.length ? atHour23 : []
-  }
+  const yDomain = paddedYDomain(data)
 
   return Plot.plot({
     width,
     height: CHART_HEIGHT,
     marginLeft: 52,  // widest abbreviated label is "500K" ≈ 28px; give breathing room
-    marginRight: 48, // room for inline year labels
+    marginRight: 24,
     color: {
       domain: [2025, 2026],
       range: [COLOR_2025, COLOR_2026],
@@ -76,8 +79,10 @@ function buildPlot(width: number, data: HourlyYoYRow[]) {
       tickFormat: (v: number) => fmtHour(v),
     },
     y: {
+      domain: yDomain,
       label: 'Avg entries',
-      tickFormat: fmtCount,
+      ticks: 5,
+      tickFormat: fmtAxisCount,
       grid: '#ECE7D8',
     },
     marks: [
@@ -89,7 +94,7 @@ function buildPlot(width: number, data: HourlyYoYRow[]) {
         strokeWidth: 1,
         curve: 'monotone-x',
       }),
-      // Current-year line — blue, slightly thicker so it reads as primary
+      // Current-year line — red, slightly thicker so it reads as primary
       Plot.lineY(data2026, {
         x: 'hour',
         y: 'avg_entries',
@@ -97,32 +102,6 @@ function buildPlot(width: number, data: HourlyYoYRow[]) {
         strokeWidth: 2,
         curve: 'monotone-x',
       }),
-      // Inline "2025" label at hour 23 of the prior series
-      ...lastOf(data2025).map((row) =>
-        Plot.text([row], {
-          x: 'hour',
-          y: 'avg_entries',
-          text: () => '2025',
-          fill: COLOR_2025,
-          textAnchor: 'start',
-          dx: 4,
-          fontSize: 11,
-          fontWeight: 500,
-        }),
-      ),
-      // Inline "2026" label at hour 23 of the current series
-      ...lastOf(data2026).map((row) =>
-        Plot.text([row], {
-          x: 'hour',
-          y: 'avg_entries',
-          text: () => '2026',
-          fill: COLOR_2026,
-          textAnchor: 'start',
-          dx: 4,
-          fontSize: 11,
-          fontWeight: 600,
-        }),
-      ),
       ...chartHoverMarks(wide, 'hour'),
     ],
   })

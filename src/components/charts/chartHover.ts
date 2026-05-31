@@ -13,6 +13,15 @@ export const fmtCount = (v: number): string => {
   return `${sign}${Math.round(abs)}`
 }
 
+/** Compact y-axis labels, retaining one decimal so nearby ticks do not collapse. */
+export const fmtAxisCount = (v: number): string => {
+  const sign = v < 0 ? '-' : ''
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000) return `${sign}${+(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sign}${+(abs / 1_000).toFixed(1)}K`
+  return `${sign}${+(abs).toFixed(abs < 10 && abs % 1 !== 0 ? 1 : 0)}`
+}
+
 /** Format an hour-of-day label for compact chart axes/readouts. */
 export function fmtHour(h: number): string {
   if (h === 0) return '12a'
