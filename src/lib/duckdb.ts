@@ -1,8 +1,20 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
+import metadata from '../../public/data/metadata.json'
+import { createQueryResultCache } from './queryCache'
 
 const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
 
 let dbPromise: Promise<duckdb.AsyncDuckDB> | null = null
+const queryResultCache = createQueryResultCache({ maxEntries: 50 })
+const queryCacheVersion = [
+  metadata.schema_version,
+  metadata.data_as_of,
+  metadata.last_updated,
+].join(':')
+
+interface DuckQueryOptions {
+  cache?: boolean
+}
 
 function initDb(): Promise<duckdb.AsyncDuckDB> {
   if (dbPromise) return dbPromise
@@ -45,7 +57,7 @@ function initDb(): Promise<duckdb.AsyncDuckDB> {
   return dbPromise
 }
 
-export async function query<T = Record<string, unknown>>(
+async function executeQuery<T = Record<string, unknown>>(
   sql: string,
   // reason: duckdb-wasm prepared statements use positional params via query(),
   // not named params, so we accept a plain array here.
@@ -61,4 +73,21 @@ export async function query<T = Record<string, unknown>>(
   } finally {
     await conn.close()
   }
+}
+
+export async function query<T = Record<string, unknown>>(
+  sql: string,
+  params: unknown[] = [],
+  options: DuckQueryOptions = {},
+): Promise<T[]> {
+  if (options.cache === false) return executeQuery<T>(sql, params)
+
+  return queryResultCache.getOrLoad(
+    { sql, params, version: queryCacheVersion },
+    () => executeQuery<T>(sql, params),
+  )
+}
+
+export function clearQueryCache(): void {
+  queryResultCache.clear()
 }
