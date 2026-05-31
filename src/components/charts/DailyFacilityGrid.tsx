@@ -7,7 +7,7 @@ import {
   COLOR_2026,
   buildDailyHoverRows,
   chartHoverMarks,
-  fmtCount,
+  fmtAxisCount,
   formatHoverReadout,
   type DailyHoverRow,
   type HoverReadout as HoverInfo,
@@ -93,10 +93,10 @@ const FacilityCard = memo(function FacilityCard({
         label: null,
       },
       y: {
-        ticks: 2,
+        ticks: 3,
         label: null,
         grid: false,
-        tickFormat: fmtCount,
+        tickFormat: fmtAxisCount,
       },
       color: {
         domain: [2025, 2026],
@@ -140,8 +140,8 @@ const FacilityCard = memo(function FacilityCard({
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') handleSelect()
       }}
-      className="bg-white border border-ink-900 p-3 cursor-pointer transition-colors hover:bg-paper-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
-      style={{ transform: 'translateY(0)', transition: 'transform var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard)' }}
+      className="bg-white border border-ink-900 p-3 cursor-pointer transition-shadow hover:shadow-[4px_4px_0_#111111] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+      style={{ transform: 'translateY(0)', transition: 'box-shadow var(--dur-fast) var(--ease-standard)' }}
     >
       {/* Card header */}
       <div className="flex items-start justify-between gap-2 mb-1">

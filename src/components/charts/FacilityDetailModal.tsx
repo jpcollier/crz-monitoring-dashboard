@@ -15,6 +15,7 @@ import {
   buildDailyHoverRows,
   buildHourlyHoverRows,
   chartHoverMarks,
+  fmtAxisCount,
   fmtCount,
   fmtHour,
   formatHoverReadout,
@@ -50,10 +51,6 @@ function xAxisForSpan(spanDays: number) {
   if (spanDays <= 14) return { ticks: 'day' as const, tickFormat: fmtMonthDay }
   if (spanDays <= 60) return { ticks: 'week' as const, tickFormat: fmtMonthDay }
   return { ticks: 'month' as const, tickFormat: fmtMonth }
-}
-
-function lastOf<T extends { date: Date }>(rows: T[]): T[] {
-  return rows.length ? [rows.reduce((a, b) => (a.date >= b.date ? a : b))] : []
 }
 
 function HoverReadoutLine({ hoverInfo }: {
@@ -131,10 +128,10 @@ function FacilityHeroChart({
         width: containerWidth,
         height: HERO_CHART_HEIGHT,
         marginLeft: 58,
-        marginRight: 52,
+        marginRight: 24,
         style: { background: 'transparent', overflow: 'visible' } as CSSStyleDeclaration,
         x: { type: 'utc', ticks, tickFormat, label: null },
-        y: { label: 'Entries', tickFormat: fmtCount, grid: '#ECE7D8' },
+        y: { label: 'Entries', ticks: 5, tickFormat: fmtAxisCount, grid: '#ECE7D8' },
         marks: [
           Plot.lineY(rows2025, {
             x: 'date',
@@ -150,30 +147,6 @@ function FacilityHeroChart({
             strokeWidth: 2.5,
             curve: 'monotone-x',
           }),
-          ...lastOf(rows2025).map((row) =>
-            Plot.text([row], {
-              x: 'date',
-              y: 'entries',
-              text: () => '2025',
-              fill: COLOR_2025,
-              textAnchor: 'start',
-              dx: 5,
-              fontSize: 11,
-              fontWeight: 500,
-            }),
-          ),
-          ...lastOf(rows2026).map((row) =>
-            Plot.text([row], {
-              x: 'date',
-              y: 'entries',
-              text: () => '2026',
-              fill: COLOR_2026,
-              textAnchor: 'start',
-              dx: 5,
-              fontSize: 11,
-              fontWeight: 600,
-            }),
-          ),
           ...chartHoverMarks(buildDailyHoverRows(parsed, (row) => row.entries), 'date'),
         ],
       })
@@ -186,7 +159,7 @@ function FacilityHeroChart({
         width: containerWidth,
         height: HERO_CHART_HEIGHT,
         marginLeft: 58,
-        marginRight: 52,
+        marginRight: 24,
         style: { background: 'transparent', overflow: 'visible' } as CSSStyleDeclaration,
         x: {
           type: 'linear',
@@ -195,7 +168,7 @@ function FacilityHeroChart({
           tickFormat: fmtHour,
           label: null,
         },
-        y: { label: 'Avg entries', tickFormat: fmtCount, grid: '#ECE7D8' },
+        y: { label: 'Avg entries', ticks: 5, tickFormat: fmtAxisCount, grid: '#ECE7D8' },
         marks: [
           Plot.lineY(rows2025, {
             x: 'hour',
@@ -211,30 +184,6 @@ function FacilityHeroChart({
             strokeWidth: 2.5,
             curve: 'monotone-x',
           }),
-          ...rows2025.filter((row) => row.hour === 23).map((row) =>
-            Plot.text([row], {
-              x: 'hour',
-              y: 'avg_entries',
-              text: () => '2025',
-              fill: COLOR_2025,
-              textAnchor: 'start',
-              dx: 5,
-              fontSize: 11,
-              fontWeight: 500,
-            }),
-          ),
-          ...rows2026.filter((row) => row.hour === 23).map((row) =>
-            Plot.text([row], {
-              x: 'hour',
-              y: 'avg_entries',
-              text: () => '2026',
-              fill: COLOR_2026,
-              textAnchor: 'start',
-              dx: 5,
-              fontSize: 11,
-              fontWeight: 600,
-            }),
-          ),
           ...chartHoverMarks(buildHourlyHoverRows(hourlyRows, (row) => row.avg_entries), 'hour'),
         ],
       })
@@ -356,7 +305,7 @@ const ClassCard = memo(function ClassCard({ vehicleClass, pctChange, mode, rows 
       marginBottom: 22,
       marginLeft: 42,
       style: { background: 'transparent', overflow: 'visible' } as CSSStyleDeclaration,
-      y: { ticks: 2, label: null as string | null, grid: false, tickFormat: fmtCount },
+      y: { ticks: 3, label: null as string | null, grid: false, tickFormat: fmtAxisCount },
     }
 
     if (mode === 'daily') {

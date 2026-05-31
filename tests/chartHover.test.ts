@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDailyHoverRows } from '../src/components/charts/chartHover'
+import { buildDailyHoverRows, fmtAxisCount } from '../src/components/charts/chartHover'
 
 describe('buildDailyHoverRows', () => {
   it('pairs 2026 and 2025 values by plot_date calendar day', () => {
@@ -16,5 +16,17 @@ describe('buildDailyHoverRows', () => {
         value2025: 75,
       },
     ])
+  })
+})
+
+describe('fmtAxisCount', () => {
+  it('keeps one decimal for compact K labels when rounding would collapse nearby ticks', () => {
+    expect(fmtAxisCount(1_240)).toBe('1.2K')
+    expect(fmtAxisCount(1_260)).toBe('1.3K')
+  })
+
+  it('keeps one decimal for compact M labels', () => {
+    expect(fmtAxisCount(1_240_000)).toBe('1.2M')
+    expect(fmtAxisCount(1_260_000)).toBe('1.3M')
   })
 })
