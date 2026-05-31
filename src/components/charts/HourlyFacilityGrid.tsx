@@ -1,5 +1,5 @@
 import * as Plot from '@observablehq/plot'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChangeBadge from '../ChangeBadge'
 import type { HourlyGroupRow, GroupAggRow } from '../../lib/queries'
 import {
@@ -48,12 +48,18 @@ interface FacilityCardProps {
   group: string
   pctChange: number | null
   rows: HourlyGroupRow[]
-  onClick: () => void
+  onGroupClick: (detectionGroup: string) => void
 }
 
-function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
+const FacilityCard = memo(function FacilityCard({
+  group,
+  pctChange,
+  rows,
+  onGroupClick,
+}: FacilityCardProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
+  const handleSelect = useCallback(() => onGroupClick(group), [group, onGroupClick])
 
   useEffect(() => {
     if (!chartRef.current) return
@@ -120,9 +126,9 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
     <div
       role="button"
       tabIndex={0}
-      onClick={onClick}
+      onClick={handleSelect}
       onKeyDown={e => {
-        if (e.key === 'Enter' || e.key === ' ') onClick()
+        if (e.key === 'Enter' || e.key === ' ') handleSelect()
       }}
       className="bg-white border border-ink-900 p-3 cursor-pointer transition-colors hover:bg-paper-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
       style={{ transition: 'background var(--dur-fast) var(--ease-standard)' }}
@@ -180,7 +186,7 @@ function FacilityCard({ group, pctChange, rows, onClick }: FacilityCardProps) {
       )}
     </div>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Skeleton card
@@ -209,6 +215,19 @@ export function HourlyFacilityGrid({
   error,
   onGroupClick,
 }: HourlyFacilityGridProps) {
+  const rowsByGroup = useMemo(() => {
+    const grouped = new Map<string, HourlyGroupRow[]>()
+    for (const row of timeData) {
+      const list = grouped.get(row.detection_group)
+      if (list) {
+        list.push(row)
+      } else {
+        grouped.set(row.detection_group, [row])
+      }
+    }
+    return grouped
+  }, [timeData])
+
   // --- Loading state -------------------------------------------------------
   if (isLoading) {
     return (
@@ -244,17 +263,6 @@ export function HourlyFacilityGrid({
     )
   }
 
-  // --- Build per-group lookup for fast slicing -----------------------------
-  const rowsByGroup = new Map<string, HourlyGroupRow[]>()
-  for (const row of timeData) {
-    const list = rowsByGroup.get(row.detection_group)
-    if (list) {
-      list.push(row)
-    } else {
-      rowsByGroup.set(row.detection_group, [row])
-    }
-  }
-
   // aggData is already sorted by current_entries DESC from the query.
   return (
     <div
@@ -268,7 +276,7 @@ export function HourlyFacilityGrid({
           group={agg.detection_group}
           pctChange={agg.pct_change}
           rows={rowsByGroup.get(agg.detection_group) ?? []}
-          onClick={() => onGroupClick(agg.detection_group)}
+          onGroupClick={onGroupClick}
         />
       ))}
     </div>

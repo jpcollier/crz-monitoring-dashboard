@@ -1,5 +1,5 @@
 import * as Plot from '@observablehq/plot'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import ChangeBadge from '../ChangeBadge'
 import type {
   ClassAggRow,
@@ -337,7 +337,7 @@ interface ClassCardProps {
   rows: DailyClassTimeRow[] | HourlyClassRow[]
 }
 
-function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
+const ClassCard = memo(function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
   const chartRef = useRef<HTMLDivElement>(null)
   const [hoverInfo, setHoverInfo] = useState<HoverReadout | null>(null)
 
@@ -479,7 +479,7 @@ function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
       )}
     </div>
   )
-}
+})
 
 function SkeletonCard() {
   return (
@@ -539,17 +539,20 @@ export function FacilityDetailModal({
     }
   }, [isOpen, onClose])
 
-  if (!isOpen) return null
-
-  const rowsByClass = new Map<string, DailyClassTimeRow[] | HourlyClassRow[]>()
-  for (const row of classRows) {
-    const list = rowsByClass.get(row.vehicle_class)
-    if (list) {
-      list.push(row as never)
-    } else {
-      rowsByClass.set(row.vehicle_class, [row] as DailyClassTimeRow[] | HourlyClassRow[])
+  const rowsByClass = useMemo(() => {
+    const grouped = new Map<string, DailyClassTimeRow[] | HourlyClassRow[]>()
+    for (const row of classRows) {
+      const list = grouped.get(row.vehicle_class)
+      if (list) {
+        list.push(row as never)
+      } else {
+        grouped.set(row.vehicle_class, [row] as DailyClassTimeRow[] | HourlyClassRow[])
+      }
     }
-  }
+    return grouped
+  }, [classRows])
+
+  if (!isOpen) return null
 
   const modeContext = mode === 'daily' ? '2026 vs 2025' : 'avg entries by hour'
 
