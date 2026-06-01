@@ -39,6 +39,7 @@ import logging
 import os
 import sys
 import tempfile
+import time
 
 import duckdb
 import requests
@@ -59,6 +60,9 @@ HOURLY_PARQUET = os.path.join(PUBLIC_DATA_DIR, "crz_hourly.parquet")
 METADATA_JSON = os.path.join(PUBLIC_DATA_DIR, "metadata.json")
 
 SCHEMA_VERSION = 1
+
+DOWNLOAD_ATTEMPTS = 3
+DOWNLOAD_BACKOFF_SECONDS = 2
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -81,10 +85,40 @@ def ensure_output_dir() -> None:
     log.info("Output directory: %s", PUBLIC_DATA_DIR)
 
 
+def _is_transient_download_error(exc: Exception) -> bool:
+    """Return True when *exc* is worth retrying during CSV download."""
+    if isinstance(
+        exc,
+        (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.ChunkedEncodingError,
+        ),
+    ):
+        return True
+
+    if isinstance(exc, requests.exceptions.HTTPError):
+        response = exc.response
+        return response is not None and 500 <= response.status_code < 600
+
+    return False
+
+
+def _delete_partial_download(path: str) -> None:
+    """Best-effort cleanup for a failed Socrata CSV download attempt."""
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        return
+    except OSError as cleanup_error:
+        log.warning("Could not delete partial download %s: %s", path, cleanup_error)
+
+
 def download_csv(url: str) -> str:
     """Stream-download *url* to a named temp file and return its path.
 
-    Uses requests so we control timeouts and can show progress.  The caller
+    Uses requests so we control timeouts, show progress, and retry transient
+    Socrata/network failures consistently in both local runs and CI.  The caller
     is responsible for deleting the file when done.
 
     Timeout tuple: (connect_seconds, read_seconds_between_chunks).
@@ -94,33 +128,69 @@ def download_csv(url: str) -> str:
     log.info("Downloading CSV: %s", url)
     chunk_size = 4 * 1024 * 1024  # 4 MB chunks
 
-    tmp = tempfile.NamedTemporaryFile(
-        suffix=".csv", prefix="crz_raw_", delete=False
-    )
-    try:
-        with requests.get(url, stream=True, timeout=(30, 120)) as resp:
-            resp.raise_for_status()
-            total_bytes = int(resp.headers.get("content-length", 0))
-            written = 0
-            for chunk in resp.iter_content(chunk_size=chunk_size):
-                tmp.write(chunk)
-                written += len(chunk)
-                if total_bytes:
-                    log.info(
-                        "  %.1f%% — %d MB / %d MB",
-                        written / total_bytes * 100,
-                        written // 1_048_576,
-                        total_bytes // 1_048_576,
-                    )
-        tmp.flush()
-    except Exception:
-        tmp.close()
-        os.unlink(tmp.name)
-        raise
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".csv", prefix="crz_raw_", delete=False
+        )
+        written = 0
+        try:
+            log.info(
+                "Download attempt %d/%d: %s",
+                attempt,
+                DOWNLOAD_ATTEMPTS,
+                tmp.name,
+            )
+            with requests.get(url, stream=True, timeout=(30, 120)) as resp:
+                resp.raise_for_status()
+                total_bytes = int(resp.headers.get("content-length", 0))
+                for chunk in resp.iter_content(chunk_size=chunk_size):
+                    if not chunk:
+                        continue
+                    tmp.write(chunk)
+                    written += len(chunk)
+                    if total_bytes:
+                        log.info(
+                            "  %.1f%% — %d MB / %d MB",
+                            written / total_bytes * 100,
+                            written // 1_048_576,
+                            total_bytes // 1_048_576,
+                        )
+            tmp.flush()
+            tmp.close()
+            log.info(
+                "Download complete: %s (%.1f MB)",
+                tmp.name,
+                written / 1_048_576,
+            )
+            return tmp.name
+        except Exception as exc:
+            tmp.close()
+            _delete_partial_download(tmp.name)
 
-    tmp.close()
-    log.info("Download complete: %s (%.1f MB)", tmp.name, written / 1_048_576)
-    return tmp.name
+            if not _is_transient_download_error(exc):
+                log.error("Non-retryable CSV download failure: %s", exc)
+                raise
+
+            if attempt >= DOWNLOAD_ATTEMPTS:
+                log.error(
+                    "CSV download failed after %d attempts; last error: %s",
+                    DOWNLOAD_ATTEMPTS,
+                    exc,
+                )
+                raise
+
+            backoff = DOWNLOAD_BACKOFF_SECONDS * (2 ** (attempt - 1))
+            log.warning(
+                "Transient CSV download failure on attempt %d/%d: %s. "
+                "Deleted partial file and retrying in %d s.",
+                attempt,
+                DOWNLOAD_ATTEMPTS,
+                exc,
+                backoff,
+            )
+            time.sleep(backoff)
+
+    raise RuntimeError("unreachable: CSV download retry loop exhausted")
 
 
 # ---------------------------------------------------------------------------
