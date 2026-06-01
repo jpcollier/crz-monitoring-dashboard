@@ -1,6 +1,7 @@
 import * as Plot from '@observablehq/plot'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import ChangeBadge from '../ChangeBadge'
+import { useInViewport } from '../../hooks/useInViewport'
 import type {
   ClassAggRow,
   DailyClassTimeRow,
@@ -287,11 +288,14 @@ interface ClassCardProps {
 }
 
 const ClassCard = memo(function ClassCard({ vehicleClass, pctChange, mode, rows }: ClassCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<HTMLDivElement>(null)
   const [hoverInfo, setHoverInfo] = useState<HoverReadout | null>(null)
+  const shouldRenderChart = useInViewport(cardRef)
 
   useEffect(() => {
     if (!chartRef.current) return
+    if (!shouldRenderChart) return
     if (rows.length === 0) return
 
     const width = chartRef.current.clientWidth || 300
@@ -392,13 +396,13 @@ const ClassCard = memo(function ClassCard({ vehicleClass, pctChange, mode, rows 
       plot.remove()
       setHoverInfo(null)
     }
-  }, [rows, mode])
+  }, [rows, mode, shouldRenderChart])
 
   const has2026 = rows.some((row) => row.year === 2026)
   const has2025 = rows.some((row) => row.year === 2025)
 
   return (
-    <div className="bg-white border border-ink-900 p-3">
+    <div ref={cardRef} className="bg-white border border-ink-900 p-3">
       <div className="flex items-center justify-between gap-2 mb-1">
         <span
           className="text-xs font-semibold leading-tight truncate"
@@ -413,6 +417,12 @@ const ClassCard = memo(function ClassCard({ vehicleClass, pctChange, mode, rows 
         <div className="flex items-center justify-center h-[116px] text-xs" style={{ color: 'var(--fg-faint)' }}>
           No data
         </div>
+      ) : !shouldRenderChart ? (
+        <div
+          className="h-[116px] bg-paper-100"
+          role="status"
+          aria-label={`Preparing ${vehicleClass} chart`}
+        />
       ) : (
         <>
           <div ref={chartRef} className="w-full" />

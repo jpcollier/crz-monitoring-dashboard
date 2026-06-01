@@ -117,11 +117,11 @@ export default function HourlyProfilesView() {
 
       <div className="mt-6 space-y-8">
         <section className="bg-white border border-ink-900">
-          <header className="flex items-baseline justify-between px-5 py-3 border-b border-ink-900">
+          <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-ink-900 px-4 py-3 sm:px-5">
             <span className="eyebrow">Systemwide hourly profile</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--fg-muted)' }}>avg entries by hour</span>
           </header>
-          <div className="p-5">
+          <div className="p-4 sm:p-5">
             <HourlyProfileChart
               data={hourlyData}
               summary={summary}

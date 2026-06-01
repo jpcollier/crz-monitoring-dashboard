@@ -1,6 +1,7 @@
 import * as Plot from '@observablehq/plot'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChangeBadge from '../ChangeBadge'
+import { useInViewport } from '../../hooks/useInViewport'
 import type { HourlyGroupRow, GroupAggRow } from '../../lib/queries'
 import {
   COLOR_2025,
@@ -58,12 +59,15 @@ const FacilityCard = memo(function FacilityCard({
   rows,
   onGroupClick,
 }: FacilityCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<HTMLDivElement>(null)
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null)
   const handleSelect = useCallback(() => onGroupClick(group), [group, onGroupClick])
+  const shouldRenderChart = useInViewport(cardRef)
 
   useEffect(() => {
     if (!chartRef.current) return
+    if (!shouldRenderChart) return
     if (rows.length === 0) return
 
     const hoverRows = buildHourlyHoverRows(rows, (r) => r.avg_entries)
@@ -118,13 +122,14 @@ const FacilityCard = memo(function FacilityCard({
       plot.remove()
       setHoverInfo(null)
     }
-  }, [rows])
+  }, [rows, shouldRenderChart])
 
   const has2026 = rows.some(r => r.year === 2026)
   const has2025 = rows.some(r => r.year === 2025)
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       onClick={handleSelect}
@@ -153,6 +158,12 @@ const FacilityCard = memo(function FacilityCard({
         >
           No data
         </div>
+      ) : !shouldRenderChart ? (
+        <div
+          className="h-[120px] bg-paper-100"
+          role="status"
+          aria-label={`Preparing ${group} hourly chart`}
+        />
       ) : (
         <>
           <div ref={chartRef} className="w-full" />
@@ -234,7 +245,7 @@ export function HourlyFacilityGrid({
     return (
       <div
         className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}
+        style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}
         aria-label="Loading facility hourly charts"
         aria-busy="true"
       >
@@ -268,7 +279,7 @@ export function HourlyFacilityGrid({
   return (
     <div
       className="grid gap-4"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}
+      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}
       aria-label="Facility hourly profile charts"
     >
       {aggData.map(agg => (

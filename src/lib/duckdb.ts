@@ -1,8 +1,7 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
 import metadata from '../../public/data/metadata.json'
+import { LOCAL_DUCKDB_BUNDLES } from './duckdbBundles'
 import { createQueryResultCache } from './queryCache'
-
-const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
 
 let dbPromise: Promise<duckdb.AsyncDuckDB> | null = null
 const queryResultCache = createQueryResultCache({ maxEntries: 50 })
@@ -19,42 +18,43 @@ interface DuckQueryOptions {
 function initDb(): Promise<duckdb.AsyncDuckDB> {
   if (dbPromise) return dbPromise
 
-  dbPromise = (async () => {
-    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES)
-    const workerUrl = URL.createObjectURL(
-      new Blob([`importScripts("${bundle.mainWorker!}");`], { type: 'text/javascript' }),
-    )
-    const worker = new Worker(workerUrl)
-    const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
-    const db = new duckdb.AsyncDuckDB(logger, worker)
-    await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
-    URL.revokeObjectURL(workerUrl)
+  dbPromise = createDb().catch((error: unknown) => {
+    dbPromise = null
+    throw error
+  })
 
-    const conn = await db.connect()
+  return dbPromise
+}
+
+async function createDb(): Promise<duckdb.AsyncDuckDB> {
+  const bundle = await duckdb.selectBundle(LOCAL_DUCKDB_BUNDLES)
+  const worker = new Worker(bundle.mainWorker!)
+  const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING)
+  const db = new duckdb.AsyncDuckDB(logger, worker)
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
+
+  const conn = await db.connect()
 
     // DuckDB-Wasm fetches Parquet files over HTTP — it needs absolute URLs,
     // not bare paths. window.location.origin covers both localhost dev and
     // the production Vercel domain without any hardcoding.
-    const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, '')
-    const dailyUrl = `${base}/data/crz_daily.parquet`
-    const hourlyUrl = `${base}/data/crz_hourly.parquet`
+  const base = window.location.origin + import.meta.env.BASE_URL.replace(/\/$/, '')
+  const dailyUrl = `${base}/data/crz_daily.parquet`
+  const hourlyUrl = `${base}/data/crz_hourly.parquet`
 
     // Register the pre-aggregated Parquet files as persistent views so every
     // query in the app can reference them by the simple names `daily` and `hourly`.
-    await conn.query(`
+  await conn.query(`
       CREATE VIEW IF NOT EXISTS daily AS
       SELECT * FROM parquet_scan('${dailyUrl}');
     `)
-    await conn.query(`
+  await conn.query(`
       CREATE VIEW IF NOT EXISTS hourly AS
       SELECT * FROM parquet_scan('${hourlyUrl}');
     `)
 
-    await conn.close()
-    return db
-  })()
-
-  return dbPromise
+  await conn.close()
+  return db
 }
 
 async function executeQuery<T = Record<string, unknown>>(
