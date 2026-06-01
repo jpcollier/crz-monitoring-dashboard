@@ -582,8 +582,7 @@ export function FacilityDetailModal({
 
             {isClassLoading && (
               <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
+                className="grid grid-cols-1 gap-3 md:grid-cols-2"
                 aria-label="Loading vehicle class charts"
                 aria-busy="true"
               >
@@ -607,8 +606,7 @@ export function FacilityDetailModal({
 
             {!isClassLoading && !classError && classAggRows.length > 0 && (
               <div
-                className="grid gap-3"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
+                className="grid grid-cols-1 gap-3 md:grid-cols-2"
               >
                 {classAggRows.map((agg) => (
                   <ClassCard
