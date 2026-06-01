@@ -36,7 +36,6 @@ sys.path.insert(0, str(_REPO_ROOT / "scripts"))
 # We do this by monkey-patching after import.
 import validate_data  # noqa: E402  (import after sys.path tweak)
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -51,13 +50,15 @@ def _make_good_daily_table() -> pa.Table:
     return pa.table(
         {
             "date": pa.array([today_2026, prior_2025], type=pa.date32()),
-            "detection_group": pa.array(["Brooklyn Bridge", "Brooklyn Bridge"], type=pa.string()),
-            "vehicle_class": pa.array(["1 - Cars, Pickups and Vans"] * 2, type=pa.string()),
+            "detection_group": pa.array(
+                ["Brooklyn Bridge", "Brooklyn Bridge"], type=pa.string()
+            ),
+            "vehicle_class": pa.array(
+                ["1 - Cars, Pickups and Vans"] * 2, type=pa.string()
+            ),
             "entry_type": pa.array(["CRZ", "CRZ"], type=pa.string()),
             "entries": pa.array([100, 95], type=pa.int64()),
-            "comparison_date": pa.array(
-                [compare_date, None], type=pa.date32()
-            ),
+            "comparison_date": pa.array([compare_date, None], type=pa.date32()),
         }
     )
 
@@ -76,7 +77,9 @@ def _make_good_hourly_table() -> pa.Table:
             ),
             "hour": pa.array([9, 10, 9, 10], type=pa.int8()),
             "detection_group": pa.array(["Brooklyn Bridge"] * 4, type=pa.string()),
-            "vehicle_class": pa.array(["1 - Cars, Pickups and Vans"] * 4, type=pa.string()),
+            "vehicle_class": pa.array(
+                ["1 - Cars, Pickups and Vans"] * 4, type=pa.string()
+            ),
             "entry_type": pa.array(["CRZ"] * 4, type=pa.string()),
             "entries": pa.array([60, 40, 55, 40], type=pa.int64()),
             "comparison_date": pa.array(
@@ -95,7 +98,7 @@ def _make_good_metadata(tmpdir: str, daily_path: str, hourly_path: str) -> str:
         "current_window_start": "2026-01-01",
         "current_window_end": "2026-05-24",
         "schema_version": 1,
-        "data_as_of": "2026-05-16",
+        "data_as_of": "2026-05-24",
         "comparable_period_end": "2026-05-24",
         "rows_daily": 2,
         "rows_hourly": 4,
@@ -155,6 +158,7 @@ def test_good_fixture_passes_all_checks(good_build):
     assert validate_data.check_entry_types(con) is True
     assert validate_data.check_detection_group_parity(con) is True
     assert validate_data.check_daily_hourly_consistency(con) is True
+    assert validate_data.check_current_year_coverage(con) is True
     assert validate_data.check_metadata_freshness() is True
 
     con.close()
@@ -200,9 +204,7 @@ def test_new_2026_detection_group_fails(tmpdir_fixture):
 
     bad_daily = pa.table(
         {
-            "date": pa.array(
-                [today_2026, today_2026, prior_2025], type=pa.date32()
-            ),
+            "date": pa.array([today_2026, today_2026, prior_2025], type=pa.date32()),
             "detection_group": pa.array(
                 [
                     "Brooklyn Bridge",
@@ -211,7 +213,9 @@ def test_new_2026_detection_group_fails(tmpdir_fixture):
                 ],
                 type=pa.string(),
             ),
-            "vehicle_class": pa.array(["1 - Cars, Pickups and Vans"] * 3, type=pa.string()),
+            "vehicle_class": pa.array(
+                ["1 - Cars, Pickups and Vans"] * 3, type=pa.string()
+            ),
             "entry_type": pa.array(["CRZ"] * 3, type=pa.string()),
             "entries": pa.array([100, 50, 95], type=pa.int64()),
             "comparison_date": pa.array(
@@ -253,7 +257,9 @@ def test_daily_hourly_mismatch_fails(tmpdir_fixture):
         {
             "date": pa.array([today_2026, prior_2025], type=pa.date32()),
             "detection_group": pa.array(["Brooklyn Bridge"] * 2, type=pa.string()),
-            "vehicle_class": pa.array(["1 - Cars, Pickups and Vans"] * 2, type=pa.string()),
+            "vehicle_class": pa.array(
+                ["1 - Cars, Pickups and Vans"] * 2, type=pa.string()
+            ),
             "entry_type": pa.array(["CRZ"] * 2, type=pa.string()),
             "entries": pa.array([200, 95], type=pa.int64()),  # inflated daily for 2026
             "comparison_date": pa.array([compare_date, None], type=pa.date32()),
@@ -284,7 +290,9 @@ def test_daily_hourly_mismatch_fails(tmpdir_fixture):
 
 def test_stale_metadata_fails(tmpdir_fixture, good_build):
     """Set last_updated to 10 days ago — should exceed the 8-day limit."""
-    stale_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=10)
+    stale_dt = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        days=10
+    )
     with open(good_build["meta"], "r") as f:
         meta = json.load(f)
     meta["last_updated"] = stale_dt.isoformat()
@@ -293,9 +301,9 @@ def test_stale_metadata_fails(tmpdir_fixture, good_build):
 
     validate_data.METADATA_JSON = good_build["meta"]
     result = validate_data.check_metadata_freshness()
-    assert result is False, (
-        "check_metadata_freshness should fail when last_updated is 10 days old"
-    )
+    assert (
+        result is False
+    ), "check_metadata_freshness should fail when last_updated is 10 days old"
 
 
 # ---------------------------------------------------------------------------
@@ -321,3 +329,71 @@ def test_missing_column_fails(tmpdir_fixture):
     result = validate_data.check_columns(con)
     con.close()
     assert result is False, "check_columns should fail when 'entries' column is absent"
+
+
+# ---------------------------------------------------------------------------
+# Test 6: no current-year rows or future metadata window → coverage check fails
+# ---------------------------------------------------------------------------
+
+
+def test_current_year_coverage_missing_fails(tmpdir_fixture):
+    """A 2025-only artifact must not pass as a 2026 dashboard build."""
+    prior_2025 = datetime.date(2025, 6, 5)
+    bad_daily = pa.table(
+        {
+            "date": pa.array([prior_2025], type=pa.date32()),
+            "detection_group": pa.array(["Brooklyn Bridge"], type=pa.string()),
+            "vehicle_class": pa.array(["1 - Cars, Pickups and Vans"], type=pa.string()),
+            "entry_type": pa.array(["CRZ"], type=pa.string()),
+            "entries": pa.array([95], type=pa.int64()),
+            "comparison_date": pa.array([None], type=pa.date32()),
+        }
+    )
+    bad_hourly = pa.table(
+        {
+            "date": pa.array([prior_2025], type=pa.date32()),
+            "hour": pa.array([9], type=pa.int8()),
+            "detection_group": pa.array(["Brooklyn Bridge"], type=pa.string()),
+            "vehicle_class": pa.array(["1 - Cars, Pickups and Vans"], type=pa.string()),
+            "entry_type": pa.array(["CRZ"], type=pa.string()),
+            "entries": pa.array([95], type=pa.int64()),
+            "comparison_date": pa.array([None], type=pa.date32()),
+        }
+    )
+
+    daily_path = os.path.join(tmpdir_fixture, "crz_daily.parquet")
+    hourly_path = os.path.join(tmpdir_fixture, "crz_hourly.parquet")
+    pq.write_table(bad_daily, daily_path)
+    pq.write_table(bad_hourly, hourly_path)
+    meta_path = _make_good_metadata(tmpdir_fixture, daily_path, hourly_path)
+    with open(meta_path, "r") as f:
+        meta = json.load(f)
+    meta["data_as_of"] = "2025-06-05"
+    meta["current_window_end"] = "2026-06-01"
+    meta["comparable_period_end"] = "2026-06-01"
+    with open(meta_path, "w") as f:
+        json.dump(meta, f)
+
+    build = {"daily": daily_path, "hourly": hourly_path, "meta": meta_path}
+    con = _patched_con(build)
+
+    assert validate_data.check_detection_group_parity(con) is False
+    assert validate_data.check_current_year_coverage(con) is False
+
+    con.close()
+
+
+def test_metadata_window_later_than_source_fails(good_build):
+    """The dashboard window must not extend beyond source data_as_of."""
+    with open(good_build["meta"], "r") as f:
+        meta = json.load(f)
+    meta["current_window_end"] = "2026-06-01"
+    meta["comparable_period_end"] = "2026-06-01"
+    with open(good_build["meta"], "w") as f:
+        json.dump(meta, f)
+
+    con = _patched_con(good_build)
+    result = validate_data.check_current_year_coverage(con)
+    con.close()
+
+    assert result is False, "current_window_end after data_as_of should fail"

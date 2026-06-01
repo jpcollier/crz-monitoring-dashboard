@@ -61,6 +61,8 @@ METADATA_JSON = os.path.join(PUBLIC_DATA_DIR, "metadata.json")
 
 SCHEMA_VERSION = 1
 
+SOURCE_ROW_REGRESSION_TOLERANCE = 0.01  # allow up to a 1% row-count drop
+
 DOWNLOAD_ATTEMPTS = 3
 DOWNLOAD_BACKOFF_SECONDS = 2
 
@@ -131,7 +133,128 @@ def _duckdb_string_literal(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def create_raw_views(con: duckdb.DuckDBPyConnection, csv_path: str) -> tuple[int, int, int]:
+def _parse_iso_date(value: object) -> datetime.date | None:
+    """Parse a YYYY-MM-DD metadata value, returning None for absent/invalid values."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _load_existing_metadata() -> dict | None:
+    """Load existing metadata.json when present, for regression checks."""
+    if not os.path.isfile(METADATA_JSON):
+        return None
+
+    try:
+        with open(METADATA_JSON, encoding="utf-8") as f:
+            metadata = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not read existing metadata.json: {exc}") from exc
+
+    if not isinstance(metadata, dict):
+        raise ValueError("Existing metadata.json must contain a JSON object.")
+    return metadata
+
+
+def _validate_source_coverage(
+    *,
+    source_row_count: int,
+    min_source_date: datetime.date | None,
+    max_source_date: datetime.date | None,
+    current_year: int,
+    current_year_source_row_count: int,
+    current_year_data_as_of: str | None,
+    existing_metadata: dict | None,
+) -> None:
+    """Abort suspicious source exports before artifacts are replaced.
+
+    The Socrata bulk CSV endpoint can occasionally return a truncated or
+    stale-looking export.  Do not let that overwrite a better committed build.
+    """
+    if min_source_date is None or max_source_date is None:
+        raise ValueError("No valid dated source rows were loaded from Socrata.")
+
+    if current_year >= 2026 and current_year_source_row_count == 0:
+        raise ValueError(
+            f"No {current_year} rows were loaded from Socrata. "
+            "Refusing to publish a current-year dashboard with only prior-year data."
+        )
+
+    if current_year >= 2026 and current_year_data_as_of is None:
+        raise ValueError(
+            f"No current-year data_as_of could be computed for {current_year}."
+        )
+
+    if existing_metadata is None:
+        return
+
+    previous_source_rows = existing_metadata.get("source_valid_row_count")
+    if not isinstance(previous_source_rows, int):
+        previous_source_rows = existing_metadata.get("source_row_count")
+
+    if isinstance(previous_source_rows, int) and previous_source_rows > 0:
+        minimum_allowed_rows = int(
+            previous_source_rows * (1 - SOURCE_ROW_REGRESSION_TOLERANCE)
+        )
+        if source_row_count < minimum_allowed_rows:
+            raise ValueError(
+                f"Source row count regressed from {previous_source_rows:,} to "
+                f"{source_row_count:,}, exceeding the "
+                f"{SOURCE_ROW_REGRESSION_TOLERANCE:.0%} tolerance. "
+                "This likely indicates a partial Socrata export."
+            )
+
+    previous_data_as_of = _parse_iso_date(existing_metadata.get("data_as_of"))
+    if previous_data_as_of and max_source_date < previous_data_as_of:
+        raise ValueError(
+            f"Source max date regressed from {previous_data_as_of.isoformat()} to "
+            f"{max_source_date.isoformat()}. Refusing to overwrite fresher data."
+        )
+
+
+def _copy_view_to_temp_parquet(
+    con: duckdb.DuckDBPyConnection,
+    sql: str,
+    dest_path: str,
+) -> str:
+    """Write *sql* to a sibling temp Parquet path and return that path."""
+    tmp_path = f"{dest_path}.tmp"
+    try:
+        con.execute(f"""
+            COPY ({sql})
+            TO '{tmp_path}'
+            (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+        return tmp_path
+    except Exception:
+        _delete_partial_download(tmp_path)
+        raise
+
+
+def _write_metadata_atomically(metadata: dict, dest_path: str) -> None:
+    """Write metadata JSON atomically to avoid leaving partial files behind."""
+    fd, tmp_path = tempfile.mkstemp(
+        suffix=".tmp",
+        prefix="metadata_",
+        dir=os.path.dirname(dest_path),
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, dest_path)
+    except Exception:
+        _delete_partial_download(tmp_path)
+        raise
+
+
+def create_raw_views(
+    con: duckdb.DuckDBPyConnection, csv_path: str
+) -> tuple[int, int, int]:
     """Create raw CSV views and return (source, valid, rejected) row counts.
 
     Socrata's full CSV export occasionally contains malformed trailing fields in
@@ -328,12 +451,14 @@ def download_csv(url: str) -> str:
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Build CRZ Parquet files from Socrata.")
+    parser = argparse.ArgumentParser(
+        description="Build CRZ Parquet files from Socrata."
+    )
     parser.add_argument(
         "--local-csv",
         metavar="PATH",
         help="Skip the Socrata download and use this local CSV file instead. "
-             "Useful for re-running the aggregation after an interrupted build.",
+        "Useful for re-running the aggregation after an interrupted build.",
     )
     args = parser.parse_args()
 
@@ -375,6 +500,29 @@ def main() -> None:
     log.info("Source rows found  : %d", source_row_count)
     log.info("Source rows loaded : %d", valid_source_row_count)
     log.info("Source rows rejected: %d", rejected_source_row_count)
+
+    source_min_date, source_max_date, current_year_source_row_count = con.execute(
+        """
+        SELECT
+            MIN(toll_date),
+            MAX(toll_date),
+            COUNT(*) FILTER (WHERE YEAR(toll_date) = ?)
+        FROM raw
+    """,
+        [build_start.date().year],
+    ).fetchone()
+    log.info("Source date range  : %s → %s", source_min_date, source_max_date)
+    log.info(
+        "Source %d rows : %d",
+        build_start.date().year,
+        current_year_source_row_count,
+    )
+
+    try:
+        existing_metadata = _load_existing_metadata()
+    except ValueError as exc:
+        log.error("ABORT: %s", exc)
+        sys.exit(1)
 
     raw_columns = [r[0] for r in con.execute("DESCRIBE raw").fetchall()]
     log.info("Raw columns (%d): %s", len(raw_columns), raw_columns)
@@ -427,8 +575,11 @@ def main() -> None:
     """)
 
     unpivoted_count = con.execute("SELECT COUNT(*) FROM unpivoted").fetchone()[0]
-    log.info("Unpivoted row count : %d  (expect 2× loaded source = %d)",
-             unpivoted_count, valid_source_row_count * 2)
+    log.info(
+        "Unpivoted row count : %d  (expect 2× loaded source = %d)",
+        unpivoted_count,
+        valid_source_row_count * 2,
+    )
 
     # Sanity-check entry_type values — must only be 'CRZ' or 'Excluded'.
     bad_entry_types = con.execute("""
@@ -560,62 +711,42 @@ def main() -> None:
     log.info("Cross-check passed : daily totals == hourly sums for all rows.")
 
     # ------------------------------------------------------------------
-    # 5. Write Parquet files using DuckDB COPY … TO (FORMAT PARQUET).
-    #    ZSTD compression gives a good size/speed tradeoff.
-    #    We force the exact column order per the spec.
+    # 5. Compute and validate metadata fields before replacing artifacts.
     # ------------------------------------------------------------------
-    log.info("Writing %s ...", DAILY_PARQUET)
-    con.execute(f"""
-        COPY (
-            SELECT
-                date,
-                detection_group,
-                vehicle_class,
-                entry_type,
-                entries,
-                comparison_date
-            FROM crz_daily
-            ORDER BY date, detection_group, vehicle_class, entry_type
-        )
-        TO '{DAILY_PARQUET}'
-        (FORMAT PARQUET, COMPRESSION ZSTD)
-    """)
-    daily_size_mb = os.path.getsize(DAILY_PARQUET) / 1_048_576
-    log.info("  → %d rows, %.1f MB", daily_count, daily_size_mb)
-
-    log.info("Writing %s ...", HOURLY_PARQUET)
-    con.execute(f"""
-        COPY (
-            SELECT
-                date,
-                hour,
-                detection_group,
-                vehicle_class,
-                entry_type,
-                entries,
-                comparison_date
-            FROM crz_hourly
-            ORDER BY date, hour, detection_group, vehicle_class, entry_type
-        )
-        TO '{HOURLY_PARQUET}'
-        (FORMAT PARQUET, COMPRESSION ZSTD)
-    """)
-    hourly_size_mb = os.path.getsize(HOURLY_PARQUET) / 1_048_576
-    log.info("  → %d rows, %.1f MB", hourly_count, hourly_size_mb)
-
-    # ------------------------------------------------------------------
-    # 6. Compute metadata fields.
-    # ------------------------------------------------------------------
-    today_utc = datetime.date.today().isoformat()  # 2026-05-24
-
-    data_as_of = con.execute(
+    current_year = build_start.date().year
+    current_data_as_of = con.execute(
+        "SELECT MAX(date)::VARCHAR FROM crz_daily WHERE YEAR(date) = ?",
+        [current_year],
+    ).fetchone()[0]
+    overall_data_as_of = con.execute(
         "SELECT MAX(date)::VARCHAR FROM crz_daily"
     ).fetchone()[0]
 
-    # current_window_start is always Jan 1 of the current year.
-    current_year = datetime.date.today().year
+    try:
+        _validate_source_coverage(
+            source_row_count=valid_source_row_count,
+            min_source_date=source_min_date,
+            max_source_date=source_max_date,
+            current_year=current_year,
+            current_year_source_row_count=current_year_source_row_count,
+            current_year_data_as_of=current_data_as_of,
+            existing_metadata=existing_metadata,
+        )
+    except ValueError as exc:
+        log.error("ABORT: %s", exc)
+        sys.exit(1)
+
+    if current_data_as_of is None:
+        log.error(
+            "ABORT: No data_as_of date found for current year %d. "
+            "Refusing to build current-year dashboard artifacts.",
+            current_year,
+        )
+        sys.exit(1)
+
+    # current_window_end is anchored to source availability, not build date.
     current_window_start = f"{current_year}-01-01"
-    current_window_end = today_utc  # inclusive, recomputed every build
+    current_window_end = current_data_as_of
 
     build_end = datetime.datetime.now(datetime.timezone.utc)
     elapsed = (build_end - build_start).total_seconds()
@@ -631,16 +762,75 @@ def main() -> None:
         "current_window_end": current_window_end,
         "schema_version": SCHEMA_VERSION,
         # Legacy / convenience fields kept for browser consumers
-        "data_as_of": data_as_of,
+        "data_as_of": current_data_as_of,
+        "source_data_as_of": overall_data_as_of,
         "comparable_period_end": current_window_end,
         "rows_daily": daily_count,
         "rows_hourly": hourly_count,
     }
 
-    log.info("Writing %s ...", METADATA_JSON)
-    with open(METADATA_JSON, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=2)
-        f.write("\n")
+    # ------------------------------------------------------------------
+    # 6. Write Parquet and metadata artifacts. Parquet files are written to
+    #    sibling temp files first, then swapped into place only after both
+    #    writes succeed so a failed build does not leave mixed artifacts.
+    # ------------------------------------------------------------------
+    daily_tmp = ""
+    hourly_tmp = ""
+    try:
+        log.info("Writing temporary Parquet for %s ...", DAILY_PARQUET)
+        daily_tmp = _copy_view_to_temp_parquet(
+            con,
+            """
+            SELECT
+                date,
+                detection_group,
+                vehicle_class,
+                entry_type,
+                entries,
+                comparison_date
+            FROM crz_daily
+            ORDER BY date, detection_group, vehicle_class, entry_type
+        """,
+            DAILY_PARQUET,
+        )
+
+        log.info("Writing temporary Parquet for %s ...", HOURLY_PARQUET)
+        hourly_tmp = _copy_view_to_temp_parquet(
+            con,
+            """
+            SELECT
+                date,
+                hour,
+                detection_group,
+                vehicle_class,
+                entry_type,
+                entries,
+                comparison_date
+            FROM crz_hourly
+            ORDER BY date, hour, detection_group, vehicle_class, entry_type
+        """,
+            HOURLY_PARQUET,
+        )
+
+        os.replace(daily_tmp, DAILY_PARQUET)
+        daily_tmp = ""
+        daily_size_mb = os.path.getsize(DAILY_PARQUET) / 1_048_576
+        log.info("  %s → %d rows, %.1f MB", DAILY_PARQUET, daily_count, daily_size_mb)
+
+        os.replace(hourly_tmp, HOURLY_PARQUET)
+        hourly_tmp = ""
+        hourly_size_mb = os.path.getsize(HOURLY_PARQUET) / 1_048_576
+        log.info(
+            "  %s → %d rows, %.1f MB", HOURLY_PARQUET, hourly_count, hourly_size_mb
+        )
+
+        log.info("Writing %s ...", METADATA_JSON)
+        _write_metadata_atomically(metadata, METADATA_JSON)
+    finally:
+        if daily_tmp:
+            _delete_partial_download(daily_tmp)
+        if hourly_tmp:
+            _delete_partial_download(hourly_tmp)
 
     # ------------------------------------------------------------------
     # 7. Final summary
@@ -652,7 +842,8 @@ def main() -> None:
     log.info("  source_row_count   : %d", source_row_count)
     log.info("  source rows loaded : %d", valid_source_row_count)
     log.info("  source rows rejected: %d", rejected_source_row_count)
-    log.info("  data_as_of         : %s", data_as_of)
+    log.info("  data_as_of         : %s", current_data_as_of)
+    log.info("  source_data_as_of  : %s", overall_data_as_of)
 
     con.close()
 
