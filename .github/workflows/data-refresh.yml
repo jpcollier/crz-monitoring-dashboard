@@ -22,6 +22,11 @@ on:
   # Allow manual trigger from the Actions UI or via `gh workflow run`.
   workflow_dispatch:
 
+# Keep scheduled/manual refreshes from racing to commit the same data artifacts.
+concurrency:
+  group: data-refresh-main
+  cancel-in-progress: false
+
 jobs:
   refresh:
     name: Pull, aggregate, validate, commit
