@@ -1,13 +1,15 @@
 {
-  "last_updated": "2026-05-24T17:53:47.458988+00:00",
-  "source_row_count": 5152896,
-  "daily_row_count": 71568,
-  "hourly_row_count": 1717632,
+  "last_updated": "2026-06-01T15:06:02.976978+00:00",
+  "source_row_count": 1571826,
+  "source_valid_row_count": 1571821,
+  "source_rejected_row_count": 5,
+  "daily_row_count": 21888,
+  "hourly_row_count": 524016,
   "current_window_start": "2026-01-01",
-  "current_window_end": "2026-05-24",
+  "current_window_end": "2026-06-01",
   "schema_version": 1,
-  "data_as_of": "2026-05-16",
-  "comparable_period_end": "2026-05-24",
-  "rows_daily": 71568,
-  "rows_hourly": 1717632
+  "data_as_of": "2025-06-05",
+  "comparable_period_end": "2026-06-01",
+  "rows_daily": 21888,
+  "rows_hourly": 524016
 }
