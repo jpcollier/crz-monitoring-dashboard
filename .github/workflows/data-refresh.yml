@@ -1,7 +1,8 @@
 # data-refresh.yml
 # =================
-# Rebuilds the CRZ Parquet files weekly and commits any changes to main.
-# A push to main triggers Vercel's standard git-deploy automatically.
+# Rebuilds the CRZ Parquet files weekly and commits any changes to the
+# repository default branch. A push to the default branch triggers Vercel's
+# standard git-deploy automatically.
 #
 # Schedule: Mondays at 06:00 US/Eastern.
 #   - 10:00 UTC during EST (UTC-5, Nov–Mar)
@@ -27,19 +28,21 @@ jobs:
     name: Pull, aggregate, validate, commit
     runs-on: ubuntu-latest
 
-    # Give the job write access to the repo so it can commit back.
+    # Give the job write access to commit data artifacts directly to the
+    # default branch. This workflow assumes branch protection permits
+    # github-actions[bot] direct pushes (or the default branch is unprotected).
     permissions:
       contents: write
 
     steps:
       # ----------------------------------------------------------------
-      # 1. Check out the default branch (main).
+      # 1. Check out the repository default branch.
       # ----------------------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
-          # Fetch full history so the subsequent commit has a proper parent.
+          ref: ${{ github.event.repository.default_branch }}
+          # A shallow checkout is enough for the refresh commit parent.
           fetch-depth: 1
 
       # ----------------------------------------------------------------
@@ -74,7 +77,7 @@ jobs:
         run: python scripts/validate_data.py
 
       # ----------------------------------------------------------------
-      # 6. Commit changed Parquet/metadata files back to main.
+      # 6. Commit changed Parquet/metadata files back to the default branch.
       #    If nothing changed (byte-identical build), skip the commit so
       #    we don't create an empty commit or re-trigger a Vercel deploy.
       # ----------------------------------------------------------------
@@ -93,6 +96,6 @@ jobs:
             echo "No changes to data artifacts — skipping commit."
           else
             git commit -m "[data] Weekly refresh $(date -u +'%Y-%m-%d')"
-            git push origin main
-            echo "Data artifacts committed and pushed to main."
+            git push origin "HEAD:${{ github.event.repository.default_branch }}"
+            echo "Data artifacts committed and pushed to ${{ github.event.repository.default_branch }}."
           fi
