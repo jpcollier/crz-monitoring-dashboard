@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { DATA_AS_OF, SOURCE_DATASET_NAME, SOURCE_DATASET_URL, formatDisplayDate } from './lib/metadata'
-import DailyEntriesView from './views/DailyEntriesView'
-import HourlyProfilesView from './views/HourlyProfilesView'
+
+const DailyEntriesView = lazy(() => import('./views/DailyEntriesView'))
+const HourlyProfilesView = lazy(() => import('./views/HourlyProfilesView'))
 
 const dataAsOfLabel = formatDisplayDate(DATA_AS_OF)
 
@@ -11,7 +12,7 @@ function NavItem({ to, label }: { to: string; label: string }) {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors border-r border-ink-900 last:border-r-0 ${
+        `flex-1 whitespace-nowrap px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors border-r border-ink-900 last:border-r-0 sm:flex-none sm:px-3.5 ${
           isActive
             ? 'bg-ink-900 text-paper-50'
             : 'bg-white text-ink-900 hover:bg-paper-200'
@@ -102,13 +103,13 @@ export default function App() {
         {/* 6px signal red masthead bar */}
         <div className="h-[6px] bg-signal-500 border-b border-ink-900" />
         {/* Header body */}
-        <div className="border-b border-ink-900 bg-paper-100">
-          <div className="max-w-[1240px] mx-auto px-8 flex items-center justify-between py-4 gap-8">
+          <div className="border-b border-ink-900 bg-paper-100">
+          <div className="mx-auto flex max-w-[1240px] flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:gap-8 lg:px-8">
             {/* Wordmark */}
             <div className="min-w-0">
               <div
-                className="font-display font-extrabold text-ink-900 leading-tight"
-                style={{ fontFamily: 'var(--font-display)', fontSize: 22 }}
+                className="font-display text-[20px] font-extrabold leading-tight text-ink-900 sm:text-[22px]"
+                style={{ fontFamily: 'var(--font-display)' }}
               >
                 Congestion Relief Zone Entries Dashboard
               </div>
@@ -141,7 +142,7 @@ export default function App() {
             </div>
 
             {/* Segmented nav */}
-            <nav className="flex border border-ink-900">
+            <nav className="flex w-full overflow-x-auto border border-ink-900 lg:w-auto">
               <NavItem to="/daily" label="Daily Entries" />
               <NavItem to="/hourly" label="Hourly Profiles" />
             </nav>
@@ -149,12 +150,23 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-[1240px] mx-auto px-8 py-8">
-        <Routes>
-          <Route path="/" element={<Navigate to="/daily" replace />} />
-          <Route path="/daily" element={<DailyEntriesView />} />
-          <Route path="/hourly" element={<HourlyProfilesView />} />
-        </Routes>
+      <main className="mx-auto max-w-[1240px] px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
+        <Suspense
+          fallback={
+            <div
+              className="border border-ink-900 bg-white px-4 py-5 text-sm text-ink-600"
+              role="status"
+            >
+              Loading dashboard view...
+            </div>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Navigate to="/daily" replace />} />
+            <Route path="/daily" element={<DailyEntriesView />} />
+            <Route path="/hourly" element={<HourlyProfilesView />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {isInfoOpen && <InfoModal onClose={() => setIsInfoOpen(false)} />}

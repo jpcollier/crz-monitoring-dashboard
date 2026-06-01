@@ -31,13 +31,13 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex border border-ink-900">
+    <div className="flex w-full overflow-x-auto border border-ink-900 sm:inline-flex sm:w-auto">
       {options.map((opt, i) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          className={`px-3.5 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer ${
+          className={`min-h-9 flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer sm:flex-none sm:px-3.5 ${
             i < options.length - 1 ? 'border-r border-ink-900' : ''
           } ${
             value === opt.value
@@ -64,10 +64,10 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
   const [state, setState] = useUrlState(DATA_WINDOW)
 
   return (
-    <div className="bg-white border border-ink-900 px-6 py-5">
-      <div className="flex flex-wrap items-center gap-8">
+    <div className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5">
+      <div className="grid gap-4 lg:flex lg:flex-wrap lg:items-center lg:gap-8">
 
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <FilterLabel>Period</FilterLabel>
           <SegmentedControl
             options={PRESETS}
@@ -78,8 +78,8 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
 
         {showDayType && (
           <>
-            <div className="hidden sm:block self-stretch w-px bg-ink-200" />
-            <div className="flex flex-col gap-2">
+            <div className="hidden self-stretch w-px bg-ink-200 lg:block" />
+            <div className="flex min-w-0 flex-col gap-2">
               <FilterLabel>Day type</FilterLabel>
               <SegmentedControl
                 options={DAY_TYPES}
@@ -90,9 +90,9 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           </>
         )}
 
-        <div className="hidden sm:block self-stretch w-px bg-ink-200" />
+        <div className="hidden self-stretch w-px bg-ink-200 lg:block" />
 
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <FilterLabel>Entry type</FilterLabel>
           <SegmentedControl
             options={ENTRY_TYPES}
