@@ -10,6 +10,7 @@ any of the following failures:
   3. Any required column is missing or has the wrong dtype.
   4. metadata.json `last_updated` is older than 8 days.
   5. entry_type contains any value other than 'CRZ' or 'Excluded'.
+  6. Current-year rows are missing or metadata date windows exceed source coverage.
 
 Usage
 -----
@@ -95,6 +96,27 @@ def _check_files_exist() -> bool:
     return ok
 
 
+def _read_metadata() -> dict[str, Any]:
+    with open(METADATA_JSON, encoding="utf-8") as f:
+        meta = json.load(f)
+    if not isinstance(meta, dict):
+        raise ValueError("metadata.json must contain a JSON object")
+    return meta
+
+
+def _parse_iso_date(value: object, field: str) -> datetime.date | None:
+    if not isinstance(value, str):
+        _fail(f"metadata.json field '{field}' must be a YYYY-MM-DD string.")
+        return None
+    try:
+        return datetime.date.fromisoformat(value)
+    except ValueError:
+        _fail(
+            f"metadata.json field '{field}' must be a valid YYYY-MM-DD date: {value!r}"
+        )
+        return None
+
+
 def _get_schema(con: duckdb.DuckDBPyConnection, path: str) -> dict[str, str]:
     """Return {column_name: dtype_string} for a Parquet file.
 
@@ -103,9 +125,7 @@ def _get_schema(con: duckdb.DuckDBPyConnection, path: str) -> dict[str, str]:
     (e.g. 'column_name'/'column_type' vs 'name'/'duckdb_type').
     DESCRIBE returns a stable (column_name, column_type, …) tuple.
     """
-    rows = con.execute(
-        f"DESCRIBE SELECT * FROM read_parquet('{path}')"
-    ).fetchall()
+    rows = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{path}')").fetchall()
     # DESCRIBE returns: column_name, column_type, null, key, default, extra
     return {r[0]: r[1] for r in rows}
 
@@ -136,7 +156,7 @@ def _check_columns(
 
 
 def check_files_exist() -> bool:
-    log.info("Check 1/5 — Required files exist")
+    log.info("Check 1/6 — Required files exist")
     ok = _check_files_exist()
     if ok:
         log.info("  PASS: all three output files present")
@@ -144,10 +164,14 @@ def check_files_exist() -> bool:
 
 
 def check_columns(con: duckdb.DuckDBPyConnection) -> bool:
-    log.info("Check 2/5 — Required columns and types")
+    log.info("Check 2/6 — Required columns and types")
     errors: list[str] = []
-    errors.extend(_check_columns(con, DAILY_PARQUET, DAILY_EXPECTED_COLUMNS, "crz_daily"))
-    errors.extend(_check_columns(con, HOURLY_PARQUET, HOURLY_EXPECTED_COLUMNS, "crz_hourly"))
+    errors.extend(
+        _check_columns(con, DAILY_PARQUET, DAILY_EXPECTED_COLUMNS, "crz_daily")
+    )
+    errors.extend(
+        _check_columns(con, HOURLY_PARQUET, HOURLY_EXPECTED_COLUMNS, "crz_hourly")
+    )
     if errors:
         for e in errors:
             _fail(e)
@@ -157,7 +181,7 @@ def check_columns(con: duckdb.DuckDBPyConnection) -> bool:
 
 
 def check_entry_types(con: duckdb.DuckDBPyConnection) -> bool:
-    log.info("Check 3/5 — entry_type values are 'CRZ' or 'Excluded' only")
+    log.info("Check 3/6 — entry_type values are 'CRZ' or 'Excluded' only")
     bad_daily = con.execute(f"""
         SELECT DISTINCT entry_type
         FROM read_parquet('{DAILY_PARQUET}')
@@ -181,7 +205,7 @@ def check_entry_types(con: duckdb.DuckDBPyConnection) -> bool:
 
 def check_detection_group_parity(con: duckdb.DuckDBPyConnection) -> bool:
     """Check 4: no 2026 detection_group missing from 2025 data."""
-    log.info("Check 4/5 — 2026 detection groups are a subset of 2025 detection groups")
+    log.info("Check 4/6 — 2026 detection groups are a subset of 2025 detection groups")
     only_in_2026 = con.execute(f"""
         WITH g2025 AS (
             SELECT DISTINCT detection_group
@@ -219,6 +243,13 @@ def check_detection_group_parity(con: duckdb.DuckDBPyConnection) -> bool:
         FROM read_parquet('{DAILY_PARQUET}')
         WHERE YEAR(date) = 2026
     """).fetchone()[0]
+    if groups_2026 == 0:
+        _fail(
+            "No 2026 detection groups were found. This indicates the build has "
+            "no current-year data and must not be shipped."
+        )
+        return False
+
     log.info(
         "  PASS: 2026 groups (%d) are all present in 2025 (%d groups)",
         groups_2026,
@@ -229,7 +260,7 @@ def check_detection_group_parity(con: duckdb.DuckDBPyConnection) -> bool:
 
 def check_daily_hourly_consistency(con: duckdb.DuckDBPyConnection) -> bool:
     """Check 5: daily totals agree with hourly sums within 0.1%."""
-    log.info("Check 5/5 — Daily totals agree with hourly sums (tolerance 0.1%%)")
+    log.info("Check 5/6 — Daily totals agree with hourly sums (tolerance 0.1%%)")
 
     mismatches = con.execute(f"""
         WITH d AS (
@@ -284,14 +315,139 @@ def check_daily_hourly_consistency(con: duckdb.DuckDBPyConnection) -> bool:
     return True
 
 
+def check_current_year_coverage(con: duckdb.DuckDBPyConnection) -> bool:
+    """Fail if current-year rows or metadata/source date consistency are wrong."""
+    log.info("Check 6/6 — current-year coverage and metadata date consistency")
+    try:
+        meta = _read_metadata()
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        _fail(f"Could not read metadata.json: {exc}")
+        return False
+
+    current_window_start = _parse_iso_date(
+        meta.get("current_window_start"),
+        "current_window_start",
+    )
+    current_window_end = _parse_iso_date(
+        meta.get("current_window_end"),
+        "current_window_end",
+    )
+    data_as_of = _parse_iso_date(meta.get("data_as_of"), "data_as_of")
+    comparable_period_end = _parse_iso_date(
+        meta.get("comparable_period_end"),
+        "comparable_period_end",
+    )
+
+    if not all(
+        [current_window_start, current_window_end, data_as_of, comparable_period_end]
+    ):
+        return False
+
+    assert current_window_start is not None
+    assert current_window_end is not None
+    assert data_as_of is not None
+    assert comparable_period_end is not None
+
+    expected_year = current_window_start.year
+    if current_window_start != datetime.date(expected_year, 1, 1):
+        _fail(
+            "metadata.current_window_start must be Jan 1 of the expected current "
+            f"year, got {current_window_start.isoformat()}."
+        )
+        return False
+
+    if current_window_end > data_as_of:
+        _fail(
+            f"metadata.current_window_end ({current_window_end.isoformat()}) is later "
+            f"than metadata.data_as_of ({data_as_of.isoformat()})."
+        )
+        return False
+
+    if comparable_period_end != current_window_end:
+        _fail(
+            "metadata.comparable_period_end must match current_window_end, got "
+            f"{comparable_period_end.isoformat()} vs {current_window_end.isoformat()}."
+        )
+        return False
+
+    daily_current_rows, daily_current_max, daily_overall_max = con.execute(
+        f"""
+        SELECT
+            COUNT(*) FILTER (WHERE YEAR(date) = ?),
+            MAX(date) FILTER (WHERE YEAR(date) = ?),
+            MAX(date)
+        FROM read_parquet('{DAILY_PARQUET}')
+    """,
+        [expected_year, expected_year],
+    ).fetchone()
+
+    hourly_current_rows, hourly_current_max, hourly_overall_max = con.execute(
+        f"""
+        SELECT
+            COUNT(*) FILTER (WHERE YEAR(date) = ?),
+            MAX(date) FILTER (WHERE YEAR(date) = ?),
+            MAX(date)
+        FROM read_parquet('{HOURLY_PARQUET}')
+    """,
+        [expected_year, expected_year],
+    ).fetchone()
+
+    if daily_current_rows == 0 or hourly_current_rows == 0:
+        _fail(
+            f"Current-year coverage is missing for {expected_year}: "
+            f"daily rows={daily_current_rows}, hourly rows={hourly_current_rows}."
+        )
+        return False
+
+    if daily_current_max != hourly_current_max:
+        _fail(
+            f"Current-year max date mismatch: daily={daily_current_max}, "
+            f"hourly={hourly_current_max}."
+        )
+        return False
+
+    if daily_current_max != data_as_of:
+        _fail(
+            f"metadata.data_as_of ({data_as_of.isoformat()}) must equal the max "
+            f"{expected_year} source date in Parquet ({daily_current_max})."
+        )
+        return False
+
+    if daily_overall_max and daily_overall_max < data_as_of:
+        _fail(
+            f"Overall daily max date ({daily_overall_max}) is earlier than "
+            f"metadata.data_as_of ({data_as_of.isoformat()})."
+        )
+        return False
+
+    if hourly_overall_max and hourly_overall_max < data_as_of:
+        _fail(
+            f"Overall hourly max date ({hourly_overall_max}) is earlier than "
+            f"metadata.data_as_of ({data_as_of.isoformat()})."
+        )
+        return False
+
+    log.info(
+        "  PASS: %d coverage exists through %s (daily rows=%d, hourly rows=%d)",
+        expected_year,
+        data_as_of.isoformat(),
+        daily_current_rows,
+        hourly_current_rows,
+    )
+    return True
+
+
 def check_metadata_freshness() -> bool:
     """Fail if metadata.last_updated is older than STALENESS_DAYS days."""
     log.info(
         "Check (metadata) — last_updated is not older than %d days",
         STALENESS_DAYS,
     )
-    with open(METADATA_JSON, encoding="utf-8") as f:
-        meta: dict[str, Any] = json.load(f)
+    try:
+        meta = _read_metadata()
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        _fail(f"Could not read metadata.json: {exc}")
+        return False
 
     last_updated_str = meta.get("last_updated", "")
     if not last_updated_str:
@@ -319,7 +475,9 @@ def check_metadata_freshness() -> bool:
         )
         return False
 
-    log.info("  PASS: metadata last_updated=%s (%d days old)", last_updated_str, age_days)
+    log.info(
+        "  PASS: metadata last_updated=%s (%d days old)", last_updated_str, age_days
+    )
 
     # Also validate that all required keys exist.
     required_keys = {
@@ -329,6 +487,8 @@ def check_metadata_freshness() -> bool:
         "hourly_row_count",
         "current_window_start",
         "current_window_end",
+        "data_as_of",
+        "comparable_period_end",
         "schema_version",
     }
     missing_keys = required_keys - set(meta.keys())
@@ -352,8 +512,7 @@ def main() -> None:
     if not check_files_exist():
         failures.append("required files missing")
         log.error(
-            "Cannot continue — required files are absent.  "
-            "Run build_data.py first."
+            "Cannot continue — required files are absent.  " "Run build_data.py first."
         )
         sys.exit(1)
 
@@ -374,6 +533,10 @@ def main() -> None:
     # Check 5: daily/hourly total consistency.
     if not check_daily_hourly_consistency(con):
         failures.append("daily/hourly total mismatch")
+
+    # Current-year coverage and metadata/source date consistency.
+    if not check_current_year_coverage(con):
+        failures.append("current-year coverage or metadata date consistency failure")
 
     # Metadata freshness (separate from Parquet checks).
     if not check_metadata_freshness():

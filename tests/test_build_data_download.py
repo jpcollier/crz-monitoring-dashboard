@@ -167,7 +167,9 @@ def test_download_csv_deletes_partial_file_after_midstream_failure(
     os.unlink(downloaded_path)
 
 
-def test_download_csv_retries_5xx_but_not_4xx(monkeypatch, isolated_download_dir, no_sleep):
+def test_download_csv_retries_5xx_but_not_4xx(
+    monkeypatch, isolated_download_dir, no_sleep
+):
     calls = []
 
     def fake_get(*args, **kwargs):
@@ -232,20 +234,65 @@ def test_create_raw_views_rejects_malformed_required_fields(tmp_path):
     )
 
     assert (source_count, valid_count, rejected_count) == (2, 1, 1)
-    assert con.execute(
-        """
+    assert (
+        con.execute("""
         SELECT toll_date, hour_of_day, detection_group, vehicle_class,
                crz_entries, excluded_roadway_entries
         FROM raw
-        """
-    ).fetchall() == [
-        (
-            datetime.date(2025, 6, 11),
-            1,
-            "Hugh L. Carey Tunnel",
-            "5 - Motorcycles",
-            12,
-            3,
-        )
-    ]
+        """).fetchall()
+        == [
+            (
+                datetime.date(2025, 6, 11),
+                1,
+                "Hugh L. Carey Tunnel",
+                "5 - Motorcycles",
+                12,
+                3,
+            )
+        ]
+    )
     con.close()
+
+
+def test_validate_source_coverage_rejects_row_count_regression():
+    with pytest.raises(ValueError, match="Source row count regressed"):
+        build_data._validate_source_coverage(
+            source_row_count=1_571_821,
+            min_source_date=datetime.date(2025, 1, 5),
+            max_source_date=datetime.date(2025, 6, 5),
+            current_year=2026,
+            current_year_source_row_count=10,
+            current_year_data_as_of="2026-01-01",
+            existing_metadata={
+                "source_row_count": 5_152_896,
+                "data_as_of": "2026-05-16",
+            },
+        )
+
+
+def test_validate_source_coverage_rejects_missing_current_year_without_prior_metadata():
+    with pytest.raises(ValueError, match="No 2026 rows"):
+        build_data._validate_source_coverage(
+            source_row_count=1_571_821,
+            min_source_date=datetime.date(2025, 1, 5),
+            max_source_date=datetime.date(2025, 6, 5),
+            current_year=2026,
+            current_year_source_row_count=0,
+            current_year_data_as_of=None,
+            existing_metadata=None,
+        )
+
+
+def test_validate_source_coverage_accepts_current_year_growth():
+    build_data._validate_source_coverage(
+        source_row_count=5_200_000,
+        min_source_date=datetime.date(2025, 1, 5),
+        max_source_date=datetime.date(2026, 5, 16),
+        current_year=2026,
+        current_year_source_row_count=3_600_000,
+        current_year_data_as_of="2026-05-16",
+        existing_metadata={
+            "source_row_count": 5_152_896,
+            "data_as_of": "2026-05-16",
+        },
+    )
