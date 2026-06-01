@@ -5,6 +5,7 @@ Covers Socrata CSV download retry behavior in build_data.py without making
 network requests.
 """
 
+import datetime
 import os
 import sys
 import tempfile
@@ -205,3 +206,46 @@ def test_download_csv_exhausts_transient_retries_and_deletes_all_partials(
         build_data.DOWNLOAD_BACKOFF_SECONDS * 2,
     ]
     assert list(isolated_download_dir.glob("crz_raw_*.csv")) == []
+
+
+def test_create_raw_views_rejects_malformed_required_fields(tmp_path):
+    duckdb_module = pytest.importorskip("duckdb")
+    if not hasattr(duckdb_module, "connect"):
+        pytest.skip("duckdb is required for raw CSV parsing coverage")
+
+    csv_path = tmp_path / "crz_sample.csv"
+    csv_path.write_text(
+        "Toll Date,Toll Hour,Toll 10 Minute Block,Hour of Day,Day of Week Number,"
+        "Month Number,Day of Week,Week Ending Date,Time Period,Vehicle Class,"
+        "Detection Group,Detection Region,CRZ Entries,Excluded Roadway Entries\n"
+        "06/10/2025,06/10/2025 05:00:00 AM,06/10/2025 05:00:00 AM,0,5,3,"
+        "Tuesday,06/08/2025,Peak,5 - Motorcycles,Hugh L. Carey Tunnel,Brooklyn,{\n"
+        "06/11/2025,06/11/2025 05:00:00 AM,06/11/2025 05:00:00 AM,1,5,3,"
+        "Wednesday,06/08/2025,Peak,5 - Motorcycles,Hugh L. Carey Tunnel,Brooklyn,12,3\n",
+        encoding="utf-8",
+    )
+
+    con = duckdb_module.connect()
+    source_count, valid_count, rejected_count = build_data.create_raw_views(
+        con,
+        str(csv_path),
+    )
+
+    assert (source_count, valid_count, rejected_count) == (2, 1, 1)
+    assert con.execute(
+        """
+        SELECT toll_date, hour_of_day, detection_group, vehicle_class,
+               crz_entries, excluded_roadway_entries
+        FROM raw
+        """
+    ).fetchall() == [
+        (
+            datetime.date(2025, 6, 11),
+            1,
+            "Hugh L. Carey Tunnel",
+            "5 - Motorcycles",
+            12,
+            3,
+        )
+    ]
+    con.close()

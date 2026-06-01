@@ -64,6 +64,18 @@ SCHEMA_VERSION = 1
 DOWNLOAD_ATTEMPTS = 3
 DOWNLOAD_BACKOFF_SECONDS = 2
 
+MAX_REJECTED_SOURCE_ROWS = 1_000
+MAX_REJECTED_SOURCE_RATE = 0.001  # 0.1%
+
+REQUIRED_RAW_HEADERS = {
+    "Toll Date",
+    "Hour of Day",
+    "Detection Group",
+    "Vehicle Class",
+    "CRZ Entries",
+    "Excluded Roadway Entries",
+}
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -112,6 +124,121 @@ def _delete_partial_download(path: str) -> None:
         return
     except OSError as cleanup_error:
         log.warning("Could not delete partial download %s: %s", path, cleanup_error)
+
+
+def _duckdb_string_literal(value: str) -> str:
+    """Return *value* quoted as a DuckDB SQL string literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def create_raw_views(con: duckdb.DuckDBPyConnection, csv_path: str) -> tuple[int, int, int]:
+    """Create raw CSV views and return (source, valid, rejected) row counts.
+
+    Socrata's full CSV export occasionally contains malformed trailing fields in
+    columns the pipeline does not consume.  Read the export as VARCHAR with NULL
+    padding, then explicitly parse and keep only rows where the six fields needed
+    for aggregation are present and valid.  This avoids failing the whole weekly
+    refresh because of a bad unused field while still rejecting rows with corrupt
+    dates, hours, dimensions, or entry counts.
+    """
+    safe_path = csv_path.replace("\\", "/")
+    csv_literal = _duckdb_string_literal(safe_path)
+
+    con.execute(f"""
+        CREATE VIEW raw_source AS
+        SELECT *
+        FROM read_csv_auto(
+            {csv_literal},
+            all_varchar = true,
+            null_padding = true,
+            ignore_errors = false
+        )
+    """)
+
+    source_headers = {r[0] for r in con.execute("DESCRIBE raw_source").fetchall()}
+    missing_headers = REQUIRED_RAW_HEADERS - source_headers
+    if missing_headers:
+        raise ValueError(
+            "Required columns missing from source: "
+            f"{sorted(missing_headers)}. The source schema may have changed."
+        )
+
+    con.execute("""
+        CREATE VIEW raw_parsed AS
+        SELECT
+            CAST(try_strptime("Toll Date", '%m/%d/%Y') AS DATE)      AS toll_date,
+            TRY_CAST("Hour of Day" AS TINYINT)                      AS hour_of_day,
+            NULLIF(TRIM("Detection Group"), '')                     AS detection_group,
+            NULLIF(TRIM("Vehicle Class"), '')                       AS vehicle_class,
+            TRY_CAST("CRZ Entries" AS BIGINT)                       AS crz_entries,
+            TRY_CAST("Excluded Roadway Entries" AS BIGINT)          AS excluded_roadway_entries,
+            "Toll Date"                                             AS source_toll_date,
+            "Hour of Day"                                           AS source_hour_of_day,
+            "Detection Group"                                       AS source_detection_group,
+            "Vehicle Class"                                         AS source_vehicle_class,
+            "CRZ Entries"                                           AS source_crz_entries,
+            "Excluded Roadway Entries"                              AS source_excluded_roadway_entries
+        FROM raw_source
+    """)
+
+    validity_predicate = """
+        toll_date IS NOT NULL
+        AND hour_of_day IS NOT NULL
+        AND hour_of_day BETWEEN 0 AND 23
+        AND detection_group IS NOT NULL
+        AND vehicle_class IS NOT NULL
+        AND crz_entries IS NOT NULL
+        AND excluded_roadway_entries IS NOT NULL
+    """
+
+    con.execute(f"""
+        CREATE VIEW raw AS
+        SELECT
+            toll_date,
+            hour_of_day,
+            detection_group,
+            vehicle_class,
+            crz_entries,
+            excluded_roadway_entries
+        FROM raw_parsed
+        WHERE {validity_predicate}
+    """)
+
+    source_row_count = con.execute("SELECT COUNT(*) FROM raw_source").fetchone()[0]
+    valid_row_count = con.execute("SELECT COUNT(*) FROM raw").fetchone()[0]
+    rejected_row_count = source_row_count - valid_row_count
+
+    if rejected_row_count:
+        rejected_samples = con.execute(f"""
+            SELECT
+                source_toll_date,
+                source_hour_of_day,
+                source_detection_group,
+                source_vehicle_class,
+                source_crz_entries,
+                source_excluded_roadway_entries
+            FROM raw_parsed
+            WHERE NOT ({validity_predicate})
+            LIMIT 5
+        """).fetchall()
+        log.warning(
+            "Rejected %d malformed source row(s) with invalid required fields. "
+            "Sample rejected values: %s",
+            rejected_row_count,
+            rejected_samples,
+        )
+
+        max_rejected_rows = max(
+            MAX_REJECTED_SOURCE_ROWS,
+            int(source_row_count * MAX_REJECTED_SOURCE_RATE),
+        )
+        if rejected_row_count > max_rejected_rows:
+            raise ValueError(
+                f"Rejected {rejected_row_count} of {source_row_count} source rows, "
+                f"exceeding the safety limit of {max_rejected_rows}."
+            )
+
+    return source_row_count, valid_row_count, rejected_row_count
 
 
 def download_csv(url: str) -> str:
@@ -232,52 +359,25 @@ def main() -> None:
     log.info("Connecting to DuckDB (in-memory)...")
     con = duckdb.connect()
 
-    # Escape backslashes in the Windows path so DuckDB SQL parses it.
-    safe_path = tmp_csv.replace("\\", "/")
-
     # The CSV bulk export uses display-name headers ("Toll Date", "CRZ Entries")
     # while the JSON API uses snake_case. Normalize to snake_case here so all
     # downstream SQL stays consistent with the documented field names.
-    con.execute(f"""
-        CREATE VIEW raw AS
-        SELECT
-            "Toll Date"                AS toll_date,
-            "Hour of Day"              AS hour_of_day,
-            "Detection Group"          AS detection_group,
-            "Vehicle Class"            AS vehicle_class,
-            "CRZ Entries"              AS crz_entries,
-            "Excluded Roadway Entries" AS excluded_roadway_entries
-        FROM read_csv_auto(
-            '{safe_path}',
-            ignore_errors = false,
-            dateformat = '%m/%d/%Y',
-            timestampformat = '%m/%d/%Y %I:%M:%S %p'
-        )
-    """)
+    try:
+        (
+            source_row_count,
+            valid_source_row_count,
+            rejected_source_row_count,
+        ) = create_raw_views(con, tmp_csv)
+    except ValueError as exc:
+        log.error("ABORT: %s", exc)
+        sys.exit(1)
 
-    # Verify the row count and confirm expected columns exist.
-    source_row_count = con.execute("SELECT COUNT(*) FROM raw").fetchone()[0]
-    log.info("Source rows loaded : %d", source_row_count)
+    log.info("Source rows found  : %d", source_row_count)
+    log.info("Source rows loaded : %d", valid_source_row_count)
+    log.info("Source rows rejected: %d", rejected_source_row_count)
 
     raw_columns = [r[0] for r in con.execute("DESCRIBE raw").fetchall()]
     log.info("Raw columns (%d): %s", len(raw_columns), raw_columns)
-
-    required_raw_cols = {
-        "toll_date",
-        "hour_of_day",
-        "detection_group",
-        "vehicle_class",
-        "crz_entries",
-        "excluded_roadway_entries",
-    }
-    missing = required_raw_cols - {c.lower() for c in raw_columns}
-    if missing:
-        log.error(
-            "ABORT: Required columns missing from source: %s  "
-            "The source schema may have changed — review before proceeding.",
-            missing,
-        )
-        sys.exit(1)
 
     # ------------------------------------------------------------------
     # 2. Unpivot the two entry columns into entry_type rows and derive
@@ -327,8 +427,8 @@ def main() -> None:
     """)
 
     unpivoted_count = con.execute("SELECT COUNT(*) FROM unpivoted").fetchone()[0]
-    log.info("Unpivoted row count : %d  (expect 2× source = %d)",
-             unpivoted_count, source_row_count * 2)
+    log.info("Unpivoted row count : %d  (expect 2× loaded source = %d)",
+             unpivoted_count, valid_source_row_count * 2)
 
     # Sanity-check entry_type values — must only be 'CRZ' or 'Excluded'.
     bad_entry_types = con.execute("""
@@ -523,6 +623,8 @@ def main() -> None:
     metadata = {
         "last_updated": build_end.isoformat(),
         "source_row_count": source_row_count,
+        "source_valid_row_count": valid_source_row_count,
+        "source_rejected_row_count": rejected_source_row_count,
         "daily_row_count": daily_count,
         "hourly_row_count": hourly_count,
         "current_window_start": current_window_start,
@@ -548,6 +650,8 @@ def main() -> None:
     log.info("  crz_hourly.parquet : %d rows, %.1f MB", hourly_count, hourly_size_mb)
     log.info("  metadata.json      : last_updated=%s", metadata["last_updated"])
     log.info("  source_row_count   : %d", source_row_count)
+    log.info("  source rows loaded : %d", valid_source_row_count)
+    log.info("  source rows rejected: %d", rejected_source_row_count)
     log.info("  data_as_of         : %s", data_as_of)
 
     con.close()
