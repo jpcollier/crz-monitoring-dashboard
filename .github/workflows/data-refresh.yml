@@ -4,11 +4,11 @@
 # A push to main triggers Vercel's standard git-deploy automatically.
 #
 # Schedule: Mondays at 06:00 US/Eastern.
-#   - 10:00 UTC is 06:00 ET during EDT (UTC-4, Mar–Nov)
-#   - 11:00 UTC is 06:00 ET during EST (UTC-5, Nov–Mar)
-#   GitHub Actions cron uses UTC and has no DST awareness, so both UTC
-#   schedules are retained. The workflow self-filters scheduled runs and
-#   only proceeds when the current America/New_York hour is 06.
+#   - 10:00 UTC during EDT (UTC-4, Mar–Nov)
+#   - 11:00 UTC during EST (UTC-5, Nov–Mar)
+#   We schedule both cron entries so the job fires at 06:00 ET regardless
+#   of DST. GitHub Actions cron uses UTC and has no DST awareness.
+#   Both entries may fire in the transition weeks (harmless — idempotent).
 
 name: Data Refresh
 
