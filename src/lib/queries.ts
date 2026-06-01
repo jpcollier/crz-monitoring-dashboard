@@ -136,8 +136,8 @@ export async function querySystemwideSummary(
   const prior = priorWhere(period)
   return query(`
     SELECT
-      CAST(SUM(CASE WHEN ${current} THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
-      CAST(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
+      CAST(COALESCE(SUM(CASE WHEN ${current} THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
+      CAST(COALESCE(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
       CASE
         WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
         ELSE ROUND(
@@ -184,8 +184,8 @@ export async function queryGroupSummary(
   return query<GroupAggRow>(`
     SELECT
       detection_group,
-      CAST(SUM(CASE WHEN ${current} THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
-      CAST(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
+      CAST(COALESCE(SUM(CASE WHEN ${current} THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
+      CAST(COALESCE(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
       CASE
         WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
         ELSE ROUND(
@@ -237,8 +237,8 @@ export async function queryClassSummary(
   return query<ClassAggRow>(`
     SELECT
       vehicle_class,
-      CAST(SUM(CASE WHEN ${current} THEN entries ELSE 0 END) AS DOUBLE) AS current_entries,
-      CAST(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) AS DOUBLE) AS prior_entries,
+      CAST(COALESCE(SUM(CASE WHEN ${current} THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
+      CAST(COALESCE(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
       CASE
         WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
         ELSE ROUND(
