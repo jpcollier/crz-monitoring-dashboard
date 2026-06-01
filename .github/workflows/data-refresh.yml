@@ -4,19 +4,19 @@
 # A push to main triggers Vercel's standard git-deploy automatically.
 #
 # Schedule: Mondays at 06:00 US/Eastern.
-#   - 10:00 UTC during EST (UTC-5, Nov–Mar)
-#   - 11:00 UTC during EDT (UTC-4, Mar–Nov)
-#   We schedule both cron entries so the job fires at 06:00 ET regardless
-#   of DST. GitHub Actions cron uses UTC and has no DST awareness.
-#   Both entries may fire in the transition weeks (harmless — idempotent).
+#   - 10:00 UTC is 06:00 ET during EDT (UTC-4, Mar–Nov)
+#   - 11:00 UTC is 06:00 ET during EST (UTC-5, Nov–Mar)
+#   GitHub Actions cron uses UTC and has no DST awareness, so both UTC
+#   schedules are retained. The workflow self-filters scheduled runs and
+#   only proceeds when the current America/New_York hour is 06.
 
 name: Data Refresh
 
 on:
   schedule:
-    # 06:00 ET during EDT (UTC-4): 10:00 UTC — active roughly Mar–Nov
+    # Both UTC schedules are retained for DST coverage; a schedule gate
+    # below self-filters so only the run whose New York local hour is 06 proceeds.
     - cron: "0 10 * * 1"
-    # 06:00 ET during EST (UTC-5): 11:00 UTC — active roughly Nov–Mar
     - cron: "0 11 * * 1"
 
   # Allow manual trigger from the Actions UI or via `gh workflow run`.
@@ -43,9 +43,30 @@ jobs:
           fetch-depth: 1
 
       # ----------------------------------------------------------------
-      # 2. Set up Python.
+      # 2. Gate scheduled runs to the real 06:00 America/New_York window.
+      # ----------------------------------------------------------------
+      - name: Check 06:00 ET schedule window
+        id: schedule_gate
+        run: |
+          eastern_hour="$(TZ=America/New_York date +'%H')"
+          echo "Current America/New_York hour is ${eastern_hour}."
+
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Manual run requested; proceeding."
+          elif [ "${eastern_hour}" = "06" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "Scheduled run is in the 06:00 ET window; proceeding."
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Scheduled run is outside the 06:00 ET window; skipping expensive steps."
+          fi
+
+      # ----------------------------------------------------------------
+      # 3. Set up Python.
       # ----------------------------------------------------------------
       - name: Set up Python 3.12
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -53,32 +74,36 @@ jobs:
           cache-dependency-path: scripts/requirements.txt
 
       # ----------------------------------------------------------------
-      # 3. Install Python dependencies.
+      # 4. Install Python dependencies.
       # ----------------------------------------------------------------
       - name: Install Python dependencies
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.should_run == 'true'
         run: pip install -r scripts/requirements.txt
 
       # ----------------------------------------------------------------
-      # 4. Build the Parquet files and metadata.json.
+      # 5. Build the Parquet files and metadata.json.
       #    The script streams ~1 GB CSV from Socrata and writes to
       #    public/data/.  Expect 3–5 minutes.
       # ----------------------------------------------------------------
       - name: Build data artifacts
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.should_run == 'true'
         run: python scripts/build_data.py
 
       # ----------------------------------------------------------------
-      # 5. Validate the build output.
+      # 6. Validate the build output.
       #    Exits non-zero on any validation failure, which fails the job.
       # ----------------------------------------------------------------
       - name: Validate data artifacts
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.should_run == 'true'
         run: python scripts/validate_data.py
 
       # ----------------------------------------------------------------
-      # 6. Commit changed Parquet/metadata files back to main.
+      # 7. Commit changed Parquet/metadata files back to main.
       #    If nothing changed (byte-identical build), skip the commit so
       #    we don't create an empty commit or re-trigger a Vercel deploy.
       # ----------------------------------------------------------------
       - name: Commit updated data artifacts (if any)
+        if: github.event_name == 'workflow_dispatch' || steps.schedule_gate.outputs.should_run == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
