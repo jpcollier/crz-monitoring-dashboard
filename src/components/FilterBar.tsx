@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
-import { toISODate } from '../lib/alignment'
+import { comparablePeriod, toISODate } from '../lib/alignment'
 import { DATA_WINDOW, formatDisplayDate } from '../lib/metadata'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
@@ -24,33 +24,39 @@ const DAY_TYPES: { value: DayType; label: string }[] = [
 ]
 
 function SegmentedControl<T extends string>({
+  label,
   options,
   value,
   onChange,
 }: {
+  label: string
   options: { value: T; label: string }[]
   value: T
   onChange: (v: T) => void
 }) {
   return (
-    <div className="flex w-full overflow-x-auto border border-ink-900 sm:inline-flex sm:w-auto">
-      {options.map((opt, i) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={`min-h-9 flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer sm:flex-none sm:px-3.5 ${
-            i < options.length - 1 ? 'border-r border-ink-900' : ''
-          } ${
-            value === opt.value
-              ? 'bg-ink-900 text-paper-50'
-              : 'bg-transparent text-ink-900 hover:bg-paper-200'
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
+    <fieldset className="min-w-0">
+      <legend className="eyebrow mb-2">{label}</legend>
+      <div className="flex w-full overflow-x-auto border border-ink-900 bg-white sm:inline-flex sm:w-auto">
+        {options.map((opt, i) => (
+          <button
+            key={opt.value}
+            type="button"
+            aria-pressed={value === opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`min-h-9 flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-900 sm:flex-none sm:px-3.5 ${
+              i < options.length - 1 ? 'border-r border-ink-900' : ''
+            } ${
+              value === opt.value
+                ? 'bg-ink-900 text-paper-50'
+                : 'bg-transparent text-ink-900 hover:bg-paper-200'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </fieldset>
   )
 }
 
@@ -62,84 +68,106 @@ function FilterLabel({ children }: { children: ReactNode }) {
   )
 }
 
+function presetDateRange(preset: Exclude<PeriodPreset, 'custom'>): { start: string; end: string } {
+  const [[start, end]] = comparablePeriod(DATA_WINDOW, preset).current
+  return {
+    start: toISODate(start),
+    end: toISODate(end),
+  }
+}
+
 export default function FilterBar({ showDayType = false }: { showDayType?: boolean }) {
   const [state, setState] = useUrlState(DATA_WINDOW)
   const minDate = toISODate(DATA_WINDOW.currentStart)
   const maxDate = toISODate(DATA_WINDOW.currentEnd)
   const currentEndLabel = formatDisplayDate(maxDate)
+  const isCustom = state.preset === 'custom'
+  const fallbackCustomRange = state.preset === 'custom'
+    ? { start: minDate, end: maxDate }
+    : presetDateRange(state.preset)
+  const customStart = isCustom ? state.customStart ?? fallbackCustomRange.start : fallbackCustomRange.start
+  const customEnd = isCustom ? state.customEnd ?? fallbackCustomRange.end : fallbackCustomRange.end
 
   return (
-    <div className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5">
-      <div className="grid gap-4 lg:flex lg:flex-wrap lg:items-center lg:gap-8">
+    <section aria-label="Dashboard filters" className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5">
+      <div className="grid gap-5 xl:grid-cols-[minmax(20rem,auto)_minmax(18rem,1fr)_auto_auto] xl:items-start">
+        <SegmentedControl
+          label="Period"
+          options={PRESETS}
+          value={state.preset}
+          onChange={(preset) => {
+            if (preset === 'custom') {
+              setState({ preset, customStart, customEnd })
+              return
+            }
+            setState({ preset })
+          }}
+        />
 
-        <div className="flex min-w-0 flex-col gap-2">
-          <FilterLabel>Period</FilterLabel>
-          <SegmentedControl
-            options={PRESETS}
-            value={state.preset}
-            onChange={(preset) => setState({ preset })}
-          />
-          {state.preset === 'custom' && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <label className="flex flex-col gap-1">
-                <FilterLabel>Start</FilterLabel>
-                <input
-                  type="date"
-                  min={minDate}
-                  max={maxDate}
-                  value={state.customStart ?? ''}
-                  onChange={(event) =>
-                    setState({ preset: 'custom', customStart: event.target.value })
-                  }
-                  className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <FilterLabel>End</FilterLabel>
-                <input
-                  type="date"
-                  min={minDate}
-                  max={maxDate}
-                  value={state.customEnd ?? ''}
-                  onChange={(event) =>
-                    setState({ preset: 'custom', customEnd: event.target.value })
-                  }
-                  className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
-                />
-              </label>
-              <p className="text-xs leading-snug text-ink-600 sm:max-w-44">
-                2026 data available through {currentEndLabel}
-              </p>
-            </div>
-          )}
+        <div className="min-w-0 xl:border-l xl:border-ink-200 xl:pl-5">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <FilterLabel>Custom range</FilterLabel>
+            <span className="text-[11px] leading-snug text-ink-600">
+              Data through {currentEndLabel}
+            </span>
+          </div>
+          <div className={`grid gap-2 sm:grid-cols-2 ${isCustom ? '' : 'opacity-60'}`}>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-600">Start</span>
+              <input
+                type="date"
+                min={minDate}
+                max={maxDate}
+                value={customStart}
+                disabled={!isCustom}
+                onChange={(event) =>
+                  setState({ preset: 'custom', customStart: event.target.value })
+                }
+                className="min-h-9 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular disabled:cursor-not-allowed disabled:bg-paper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-600">End</span>
+              <input
+                type="date"
+                min={minDate}
+                max={maxDate}
+                value={customEnd}
+                disabled={!isCustom}
+                onChange={(event) =>
+                  setState({ preset: 'custom', customEnd: event.target.value })
+                }
+                className="min-h-9 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular disabled:cursor-not-allowed disabled:bg-paper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+              />
+            </label>
+          </div>
+          <p className="mt-2 text-xs leading-snug text-ink-600">
+            {isCustom
+              ? 'Choose a range between the available data dates.'
+              : 'Select Custom to edit the exact date range.'}
+          </p>
         </div>
 
         {showDayType && (
-          <>
-            <div className="hidden self-stretch w-px bg-ink-200 lg:block" />
-            <div className="flex min-w-0 flex-col gap-2">
-              <FilterLabel>Day type</FilterLabel>
-              <SegmentedControl
-                options={DAY_TYPES}
-                value={state.dayType}
-                onChange={(dayType) => setState({ dayType })}
-              />
-            </div>
-          </>
+          <div className="min-w-0 xl:border-l xl:border-ink-200 xl:pl-5">
+            <SegmentedControl
+              label="Day type"
+              options={DAY_TYPES}
+              value={state.dayType}
+              onChange={(dayType) => setState({ dayType })}
+            />
+          </div>
         )}
 
-        <div className="hidden self-stretch w-px bg-ink-200 lg:block" />
-
-        <div className="flex min-w-0 flex-col gap-2">
-          <FilterLabel>Entry type</FilterLabel>
+        <div className="min-w-0 xl:border-l xl:border-ink-200 xl:pl-5">
           <SegmentedControl
+            label="Entry type"
             options={ENTRY_TYPES}
             value={state.entryType}
             onChange={(entryType) => setState({ entryType })}
           />
         </div>
-
       </div>
-    </div>
+    </section>
   )
 }
