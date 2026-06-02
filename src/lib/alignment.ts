@@ -1,6 +1,6 @@
 import type { FilterState, PeriodPreset } from './types'
 
-type BuiltInPeriodPreset = Exclude<PeriodPreset, 'custom'>
+export type BuiltInPeriodPreset = Exclude<PeriodPreset, 'custom'>
 
 export type DateRange = [Date, Date]
 
@@ -73,6 +73,10 @@ export function comparablePeriod(
     case 'last_90_days':
       return periodFromCurrent([[maxDate(start, addDays(end, -89)), end]])
   }
+}
+
+export function presetDateRange(dataWindow: DataWindow, preset: BuiltInPeriodPreset): DateRange {
+  return comparablePeriod(dataWindow, preset).current[0]
 }
 
 function formatDateRangeError(dataWindow: DataWindow): string {
