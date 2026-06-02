@@ -1,7 +1,7 @@
 import { type ReactNode, useId } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
-import { toISODate } from '../lib/alignment'
-import { DATA_WINDOW, formatDisplayDate } from '../lib/metadata'
+import { presetDateRange, toISODate } from '../lib/alignment'
+import { DATA_WINDOW } from '../lib/metadata'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
 const PRESETS: { value: PeriodPreset; label: string }[] = [
@@ -94,7 +94,21 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
   const [state, setState] = useUrlState(DATA_WINDOW)
   const minDate = toISODate(DATA_WINDOW.currentStart)
   const maxDate = toISODate(DATA_WINDOW.currentEnd)
-  const currentEndLabel = formatDisplayDate(maxDate)
+
+  const handlePeriodChange = (preset: PeriodPreset) => {
+    if (preset === 'custom' && state.preset !== 'custom') {
+      const [customStart, customEnd] = presetDateRange(DATA_WINDOW, state.preset)
+
+      setState({
+        preset,
+        customStart: toISODate(customStart),
+        customEnd: toISODate(customEnd),
+      })
+      return
+    }
+
+    setState({ preset })
+  }
 
   return (
     <section
@@ -106,7 +120,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           label="Period"
           options={PRESETS}
           value={state.preset}
-          onChange={(preset) => setState({ preset })}
+          onChange={handlePeriodChange}
         />
 
         <ResponsiveChoiceControl
@@ -128,7 +142,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
 
       {state.preset === 'custom' && (
         <div className="mt-4 border-t border-ink-200 pt-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,12rem)_1fr] sm:items-end">
+          <div className="grid gap-3 sm:grid-cols-2 lg:max-w-[32rem]">
             <label className="flex flex-col gap-1">
               <FilterLabel>Start</FilterLabel>
               <input
@@ -139,7 +153,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 onChange={(event) =>
                   setState({ preset: 'custom', customStart: event.target.value })
                 }
-                className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+                className="min-w-0 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular"
               />
             </label>
             <label className="flex flex-col gap-1">
@@ -152,12 +166,9 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 onChange={(event) =>
                   setState({ preset: 'custom', customEnd: event.target.value })
                 }
-                className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+                className="min-w-0 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular"
               />
             </label>
-            <p className="text-xs leading-snug text-ink-600 sm:max-w-44">
-              2026 data available through {currentEndLabel}
-            </p>
           </div>
         </div>
       )}
