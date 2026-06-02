@@ -74,13 +74,9 @@ export default function DailyEntriesView() {
     ? (summaryRows[0] as SystemwideSummary)
     : null
 
-  // Period daily average: 2026 total divided by distinct 2026 dates in the period.
-  const distinct2026Dates = useMemo(
-    () => new Set(yoyData.filter(r => r.year === 2026).map(r => r.plot_date)).size,
-    [yoyData],
-  )
+  // Period daily average: comparable 2026 total divided by 2026 dates that have a prior-year match.
   const dailyAvg: number | null =
-    summary && distinct2026Dates > 0 ? summary.current_entries / distinct2026Dates : null
+    summary && summary.current_days > 0 ? summary.current_entries / summary.current_days : null
 
   // -------------------------------------------------------------------------
   // Facility grid

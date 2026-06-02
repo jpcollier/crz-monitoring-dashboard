@@ -22,12 +22,21 @@ function periodWhere(period: ComparablePeriod): string {
   return `(${rangeWhere(period.current)}) OR (${rangeWhere(period.prior)})`
 }
 
-function currentWhere(period: ComparablePeriod): string {
-  return rangeWhere(period.current)
+function pairedDatePredicate(groupColumns: string[] = []): string {
+  const keys = ['plot_date', ...groupColumns]
+  const comparisons = keys.map((key) => `totals.${key} = paired.${key}`).join(' AND ')
+  return `EXISTS (
+        SELECT 1
+        FROM paired_dates paired
+        WHERE ${comparisons}
+      )`
 }
 
-function priorWhere(period: ComparablePeriod): string {
-  return rangeWhere(period.prior)
+function pctChangeExpr(currentExpr: string, priorExpr: string): string {
+  return `CASE
+        WHEN ${priorExpr} = 0 THEN NULL
+        ELSE ROUND((${currentExpr} - ${priorExpr}) / ${priorExpr} * 100, 1)
+      END`
 }
 
 // Optional hourly-profile day filter. DuckDB strftime('%w') returns 0 for
@@ -42,7 +51,7 @@ function dayTypeClause(dayType: DayType = 'all'): string {
 // Used so both years share the same x-axis scale in Observable Plot.
 const PLOT_DATE_EXPR = `
   CASE WHEN YEAR(date) = 2026 THEN CAST(date AS VARCHAR)
-       ELSE CAST((date + INTERVAL 364 DAY) AS VARCHAR)
+       ELSE CAST(CAST(date + INTERVAL 364 DAY AS DATE) AS VARCHAR)
   END`
 
 // ---------------------------------------------------------------------------
@@ -64,9 +73,9 @@ export interface DailyGroupTimeRow {
 
 export interface GroupAggRow {
   detection_group: string
-  current_entries: number // 2026 total in the window
-  prior_entries: number // 2025 total in the window
-  pct_change: number // (current - prior) / prior * 100, null-safe
+  current_entries: number // 2026 total over dates present in both years
+  prior_entries: number // 2025 total over dates present in both years
+  pct_change: number | null // (current - prior) / prior * 100, null when no prior data
 }
 
 export interface DailyClassTimeRow {
@@ -80,7 +89,14 @@ export interface ClassAggRow {
   vehicle_class: string
   current_entries: number
   prior_entries: number
-  pct_change: number
+  pct_change: number | null
+}
+
+export interface SystemwideAggRow {
+  current_entries: number
+  prior_entries: number
+  pct_change: number | null
+  current_days: number
 }
 
 // Hourly profile row types — consumed by HourlyProfileChart and HourlyFacilityGrid
@@ -131,26 +147,43 @@ export async function querySystemwideSummary(
   period: ComparablePeriod,
   entryType: EntryType,
   dayType: DayType = 'all',
-): Promise<{ current_entries: number; prior_entries: number; pct_change: number }[]> {
-  const current = currentWhere(period)
-  const prior = priorWhere(period)
-  return query(`
+): Promise<SystemwideAggRow[]> {
+  return query<SystemwideAggRow>(`
+    WITH daily_totals AS (
+      SELECT
+        ${PLOT_DATE_EXPR}             AS plot_date,
+        CAST(YEAR(date) AS INTEGER)  AS year,
+        CAST(SUM(entries) AS DOUBLE) AS entries
+      FROM daily
+      WHERE (${periodWhere(period)})
+      ${etClause(entryType)}
+      ${dayTypeClause(dayType)}
+      GROUP BY plot_date, year
+    ),
+    paired_dates AS (
+      SELECT plot_date
+      FROM daily_totals
+      GROUP BY plot_date
+      HAVING COUNT(DISTINCT year) = 2
+    ),
+    comparable_totals AS (
+      SELECT *
+      FROM daily_totals totals
+      WHERE ${pairedDatePredicate()}
+    ),
+    summary AS (
+      SELECT
+        CAST(COALESCE(SUM(CASE WHEN year = 2026 THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
+        CAST(COALESCE(SUM(CASE WHEN year = 2025 THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
+        CAST(COUNT(DISTINCT CASE WHEN year = 2026 THEN plot_date END) AS INTEGER) AS current_days
+      FROM comparable_totals
+    )
     SELECT
-      CAST(COALESCE(SUM(CASE WHEN ${current} THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
-      CAST(COALESCE(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
-      CASE
-        WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
-        ELSE ROUND(
-          (SUM(CASE WHEN ${current} THEN entries ELSE 0 END) -
-           SUM(CASE WHEN ${prior} THEN entries ELSE 0 END))
-          / SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) * 100,
-          1
-        )
-      END AS pct_change
-    FROM daily
-    WHERE (${periodWhere(period)})
-    ${etClause(entryType)}
-    ${dayTypeClause(dayType)}
+      current_entries,
+      prior_entries,
+      ${pctChangeExpr('current_entries', 'prior_entries')} AS pct_change,
+      current_days
+    FROM summary
   `)
 }
 
@@ -179,27 +212,44 @@ export async function queryGroupSummary(
   entryType: EntryType,
   dayType: DayType = 'all',
 ): Promise<GroupAggRow[]> {
-  const current = currentWhere(period)
-  const prior = priorWhere(period)
   return query<GroupAggRow>(`
+    WITH daily_totals AS (
+      SELECT
+        detection_group,
+        ${PLOT_DATE_EXPR}             AS plot_date,
+        CAST(YEAR(date) AS INTEGER)  AS year,
+        CAST(SUM(entries) AS DOUBLE) AS entries
+      FROM daily
+      WHERE (${periodWhere(period)})
+      ${etClause(entryType)}
+      ${dayTypeClause(dayType)}
+      GROUP BY detection_group, plot_date, year
+    ),
+    paired_dates AS (
+      SELECT detection_group, plot_date
+      FROM daily_totals
+      GROUP BY detection_group, plot_date
+      HAVING COUNT(DISTINCT year) = 2
+    ),
+    comparable_totals AS (
+      SELECT *
+      FROM daily_totals totals
+      WHERE ${pairedDatePredicate(['detection_group'])}
+    ),
+    summary AS (
+      SELECT
+        detection_group,
+        CAST(COALESCE(SUM(CASE WHEN year = 2026 THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
+        CAST(COALESCE(SUM(CASE WHEN year = 2025 THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries
+      FROM comparable_totals
+      GROUP BY detection_group
+    )
     SELECT
       detection_group,
-      CAST(COALESCE(SUM(CASE WHEN ${current} THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
-      CAST(COALESCE(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
-      CASE
-        WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
-        ELSE ROUND(
-          (SUM(CASE WHEN ${current} THEN entries ELSE 0 END) -
-           SUM(CASE WHEN ${prior} THEN entries ELSE 0 END))
-          / SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) * 100,
-          1
-        )
-      END AS pct_change
-    FROM daily
-    WHERE (${periodWhere(period)})
-    ${etClause(entryType)}
-    ${dayTypeClause(dayType)}
-    GROUP BY detection_group
+      current_entries,
+      prior_entries,
+      ${pctChangeExpr('current_entries', 'prior_entries')} AS pct_change
+    FROM summary
     ORDER BY current_entries DESC
   `)
 }
@@ -232,28 +282,45 @@ export async function queryClassSummary(
   entryType: EntryType,
   dayType: DayType = 'all',
 ): Promise<ClassAggRow[]> {
-  const current = currentWhere(period)
-  const prior = priorWhere(period)
   return query<ClassAggRow>(`
+    WITH daily_totals AS (
+      SELECT
+        vehicle_class,
+        ${PLOT_DATE_EXPR}             AS plot_date,
+        CAST(YEAR(date) AS INTEGER)  AS year,
+        CAST(SUM(entries) AS DOUBLE) AS entries
+      FROM daily
+      WHERE (${periodWhere(period)})
+      AND detection_group = '${detectionGroup.replace(/'/g, "''")}'
+      ${etClause(entryType)}
+      ${dayTypeClause(dayType)}
+      GROUP BY vehicle_class, plot_date, year
+    ),
+    paired_dates AS (
+      SELECT vehicle_class, plot_date
+      FROM daily_totals
+      GROUP BY vehicle_class, plot_date
+      HAVING COUNT(DISTINCT year) = 2
+    ),
+    comparable_totals AS (
+      SELECT *
+      FROM daily_totals totals
+      WHERE ${pairedDatePredicate(['vehicle_class'])}
+    ),
+    summary AS (
+      SELECT
+        vehicle_class,
+        CAST(COALESCE(SUM(CASE WHEN year = 2026 THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
+        CAST(COALESCE(SUM(CASE WHEN year = 2025 THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries
+      FROM comparable_totals
+      GROUP BY vehicle_class
+    )
     SELECT
       vehicle_class,
-      CAST(COALESCE(SUM(CASE WHEN ${current} THEN entries ELSE 0 END), 0) AS DOUBLE) AS current_entries,
-      CAST(COALESCE(SUM(CASE WHEN ${prior} THEN entries ELSE 0 END), 0) AS DOUBLE) AS prior_entries,
-      CASE
-        WHEN SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) = 0 THEN NULL
-        ELSE ROUND(
-          (SUM(CASE WHEN ${current} THEN entries ELSE 0 END) -
-           SUM(CASE WHEN ${prior} THEN entries ELSE 0 END))
-          / SUM(CASE WHEN ${prior} THEN entries ELSE 0 END) * 100,
-          1
-        )
-      END AS pct_change
-    FROM daily
-    WHERE (${periodWhere(period)})
-    AND detection_group = '${detectionGroup.replace(/'/g, "''")}'
-    ${etClause(entryType)}
-    ${dayTypeClause(dayType)}
-    GROUP BY vehicle_class
+      current_entries,
+      prior_entries,
+      ${pctChangeExpr('current_entries', 'prior_entries')} AS pct_change
+    FROM summary
     ORDER BY current_entries DESC
   `)
 }
