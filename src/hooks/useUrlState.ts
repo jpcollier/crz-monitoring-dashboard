@@ -4,7 +4,7 @@ import { DATA_WINDOW } from '../lib/metadata'
 import type { DataWindow } from '../lib/metadata'
 import type { DayType, EntryType, FilterState, PeriodPreset } from '../lib/types'
 
-const VALID_PRESETS = new Set<PeriodPreset>(['ytd', 'last_90_days', 'last_30_days'])
+const VALID_PRESETS = new Set<PeriodPreset>(['ytd', 'last_90_days', 'last_30_days', 'custom'])
 const VALID_ENTRY_TYPES = new Set<EntryType>(['CRZ', 'Excluded', 'Combined'])
 const VALID_DAY_TYPES = new Set<DayType>(['all', 'weekday', 'weekend'])
 
@@ -36,7 +36,21 @@ export function parseUrlFilterState(
     preset: parsePreset(params.get('preset')),
     entryType: parseEntryType(params.get('entryType')),
     dayType: parseDayType(params.get('dayType')),
+    customStart: params.get('start') ?? undefined,
+    customEnd: params.get('end') ?? undefined,
   }
+}
+
+export function serializeUrlFilterState(state: FilterState): URLSearchParams {
+  const p = new URLSearchParams()
+  p.set('preset', state.preset)
+  p.set('entryType', state.entryType)
+  if (state.dayType !== DEFAULTS.dayType) p.set('dayType', state.dayType)
+  if (state.preset === 'custom') {
+    if (state.customStart !== undefined) p.set('start', state.customStart)
+    if (state.customEnd !== undefined) p.set('end', state.customEnd)
+  }
+  return p
 }
 
 export function useUrlState(
@@ -54,11 +68,7 @@ export function useUrlState(
             ...parseUrlFilterState(prev, dataWindow),
             ...next,
           }
-          const p = new URLSearchParams()
-          p.set('preset', merged.preset)
-          p.set('entryType', merged.entryType)
-          if (merged.dayType !== DEFAULTS.dayType) p.set('dayType', merged.dayType)
-          return p
+          return serializeUrlFilterState(merged)
         },
         { replace: false },
       )
