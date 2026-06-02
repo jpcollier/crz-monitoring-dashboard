@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
 import { comparablePeriod, toISODate } from '../lib/alignment'
-import { DATA_WINDOW, formatDisplayDate } from '../lib/metadata'
+import { DATA_WINDOW } from '../lib/metadata'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
 const PRESETS: { value: PeriodPreset; label: string }[] = [
@@ -35,16 +35,16 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <fieldset className="min-w-0">
+    <fieldset className="min-w-0 max-w-full [min-inline-size:0]">
       <legend className="eyebrow mb-2">{label}</legend>
-      <div className="flex w-full overflow-x-auto border border-ink-900 bg-white sm:inline-flex sm:w-auto">
+      <div className="flex max-w-full overflow-x-auto border border-ink-900 bg-white">
         {options.map((opt, i) => (
           <button
             key={opt.value}
             type="button"
             aria-pressed={value === opt.value}
             onClick={() => onChange(opt.value)}
-            className={`min-h-9 flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-900 sm:flex-none sm:px-3.5 ${
+            className={`min-h-9 min-w-max flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-900 sm:px-3.5 ${
               i < options.length - 1 ? 'border-r border-ink-900' : ''
             } ${
               value === opt.value
@@ -80,38 +80,39 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
   const [state, setState] = useUrlState(DATA_WINDOW)
   const minDate = toISODate(DATA_WINDOW.currentStart)
   const maxDate = toISODate(DATA_WINDOW.currentEnd)
-  const currentEndLabel = formatDisplayDate(maxDate)
   const isCustom = state.preset === 'custom'
   const fallbackCustomRange = state.preset === 'custom'
     ? { start: minDate, end: maxDate }
     : presetDateRange(state.preset)
   const customStart = isCustom ? state.customStart ?? fallbackCustomRange.start : fallbackCustomRange.start
   const customEnd = isCustom ? state.customEnd ?? fallbackCustomRange.end : fallbackCustomRange.end
+  const periodColumnClass = showDayType ? 'xl:col-span-3' : 'xl:col-span-4'
+  const customColumnClass = showDayType ? 'xl:col-span-3' : 'xl:col-span-4'
+  const entryColumnClass = showDayType ? 'xl:col-span-3' : 'xl:col-span-4'
 
   return (
-    <section aria-label="Dashboard filters" className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5">
-      <div className="grid gap-5 xl:grid-cols-[minmax(20rem,auto)_minmax(18rem,1fr)_auto_auto] xl:items-start">
-        <SegmentedControl
-          label="Period"
-          options={PRESETS}
-          value={state.preset}
-          onChange={(preset) => {
-            if (preset === 'custom') {
-              setState({ preset, customStart, customEnd })
-              return
-            }
-            setState({ preset })
-          }}
-        />
+    <section aria-label="Dashboard filters" className="overflow-hidden border border-ink-900 bg-white px-4 py-4 sm:px-6 sm:py-5">
+      <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-12 xl:items-start xl:gap-0">
+        <div className={`min-w-0 ${periodColumnClass}`}>
+          <SegmentedControl
+            label="Period"
+            options={PRESETS}
+            value={state.preset}
+            onChange={(preset) => {
+              if (preset === 'custom') {
+                setState({ preset, customStart, customEnd })
+                return
+              }
+              setState({ preset })
+            }}
+          />
+        </div>
 
-        <div className="min-w-0 xl:border-l xl:border-ink-200 xl:pl-5">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className={`min-w-0 xl:border-l xl:border-ink-200 xl:pl-5 xl:pr-5 ${customColumnClass}`}>
+          <div className="mb-2">
             <FilterLabel>Custom range</FilterLabel>
-            <span className="text-[11px] leading-snug text-ink-600">
-              Data through {currentEndLabel}
-            </span>
           </div>
-          <div className={`grid gap-2 sm:grid-cols-2 ${isCustom ? '' : 'opacity-60'}`}>
+          <div className={`grid min-w-0 gap-2 sm:grid-cols-2 ${isCustom ? '' : 'opacity-60'}`}>
             <label className="flex min-w-0 flex-col gap-1">
               <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-600">Start</span>
               <input
@@ -123,7 +124,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 onChange={(event) =>
                   setState({ preset: 'custom', customStart: event.target.value })
                 }
-                className="min-h-9 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular disabled:cursor-not-allowed disabled:bg-paper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                className="min-h-9 min-w-0 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular disabled:cursor-not-allowed disabled:bg-paper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
               />
             </label>
             <label className="flex min-w-0 flex-col gap-1">
@@ -137,19 +138,14 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 onChange={(event) =>
                   setState({ preset: 'custom', customEnd: event.target.value })
                 }
-                className="min-h-9 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular disabled:cursor-not-allowed disabled:bg-paper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
+                className="min-h-9 min-w-0 w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular disabled:cursor-not-allowed disabled:bg-paper-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-900"
               />
             </label>
           </div>
-          <p className="mt-2 text-xs leading-snug text-ink-600">
-            {isCustom
-              ? 'Choose a range between the available data dates.'
-              : 'Select Custom to edit the exact date range.'}
-          </p>
         </div>
 
         {showDayType && (
-          <div className="min-w-0 xl:border-l xl:border-ink-200 xl:pl-5">
+          <div className="min-w-0 xl:col-span-3 xl:border-l xl:border-ink-200 xl:pl-5 xl:pr-5">
             <SegmentedControl
               label="Day type"
               options={DAY_TYPES}
@@ -159,7 +155,7 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
           </div>
         )}
 
-        <div className="min-w-0 xl:border-l xl:border-ink-200 xl:pl-5">
+        <div className={`min-w-0 xl:border-l xl:border-ink-200 xl:pl-5 ${entryColumnClass}`}>
           <SegmentedControl
             label="Entry type"
             options={ENTRY_TYPES}
