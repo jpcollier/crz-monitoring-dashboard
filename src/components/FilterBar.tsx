@@ -37,16 +37,14 @@ function SegmentedControl<T extends string>({
   return (
     <fieldset className="min-w-0 max-w-full [min-inline-size:0]">
       <legend className="eyebrow mb-2">{label}</legend>
-      <div className="flex max-w-full overflow-x-auto border border-ink-900 bg-white">
-        {options.map((opt, i) => (
+      <div className="flex max-w-full flex-wrap border-l border-t border-ink-900 bg-white">
+        {options.map((opt) => (
           <button
             key={opt.value}
             type="button"
             aria-pressed={value === opt.value}
             onClick={() => onChange(opt.value)}
-            className={`min-h-9 min-w-max flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-900 sm:px-3.5 ${
-              i < options.length - 1 ? 'border-r border-ink-900' : ''
-            } ${
+            className={`min-h-9 min-w-0 flex-1 basis-1/2 whitespace-nowrap border-r border-b border-ink-900 px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer focus-visible:relative focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink-900 sm:basis-auto sm:px-3.5 ${
               value === opt.value
                 ? 'bg-ink-900 text-paper-50'
                 : 'bg-transparent text-ink-900 hover:bg-paper-200'
