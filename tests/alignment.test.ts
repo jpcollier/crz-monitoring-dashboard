@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseUrlFilterState } from '../src/hooks/useUrlState'
+import { parseUrlFilterState, serializeUrlFilterState } from '../src/hooks/useUrlState'
 import {
   comparablePeriod,
   normalizeDateRange,
@@ -158,21 +158,57 @@ describe('periodFromFilter', () => {
 })
 
 describe('parseUrlFilterState', () => {
-  it('falls back to ytd for old custom month URLs', () => {
+  it('parses custom preset dates without validating them', () => {
     const state = parseUrlFilterState(
-      new URLSearchParams('preset=custom&months=2026-01,2026-03&entryType=Combined&dayType=weekday'),
+      new URLSearchParams('preset=custom&start=not-a-date&end=2026-05-07&entryType=Combined&dayType=weekday'),
       window('2026-01-01', '2026-05-24'),
     )
 
     expect(state).toEqual({
-      preset: 'ytd',
+      preset: 'custom',
       entryType: 'Combined',
       dayType: 'weekday',
+      customStart: 'not-a-date',
+      customEnd: '2026-05-07',
     })
   })
 
   it('maps legacy preset URLs to the new rolling presets', () => {
     expect(parseUrlFilterState(new URLSearchParams('preset=last_week')).preset).toBe('last_30_days')
     expect(parseUrlFilterState(new URLSearchParams('preset=last_month')).preset).toBe('last_90_days')
+  })
+})
+
+describe('serializeUrlFilterState', () => {
+  it('serializes custom start and end dates only for custom presets', () => {
+    const custom = serializeUrlFilterState({
+      preset: 'custom',
+      entryType: 'CRZ',
+      dayType: 'all',
+      customStart: '2026-05-01',
+      customEnd: '2026-05-07',
+    })
+
+    expect(custom.toString()).toBe('preset=custom&entryType=CRZ&start=2026-05-01&end=2026-05-07')
+
+    const builtIn = serializeUrlFilterState({
+      preset: 'last_30_days',
+      entryType: 'CRZ',
+      dayType: 'all',
+      customStart: '2026-05-01',
+      customEnd: '2026-05-07',
+    })
+
+    expect(builtIn.toString()).toBe('preset=last_30_days&entryType=CRZ')
+  })
+
+  it('continues serializing entry type and non-default day type', () => {
+    const params = serializeUrlFilterState({
+      preset: 'ytd',
+      entryType: 'Combined',
+      dayType: 'weekend',
+    })
+
+    expect(params.toString()).toBe('preset=ytd&entryType=Combined&dayType=weekend')
   })
 })
