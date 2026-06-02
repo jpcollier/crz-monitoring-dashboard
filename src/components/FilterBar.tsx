@@ -1,12 +1,14 @@
 import { type ReactNode } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
-import { DATA_WINDOW } from '../lib/metadata'
+import { toISODate } from '../lib/alignment'
+import { DATA_WINDOW, formatDisplayDate } from '../lib/metadata'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
 const PRESETS: { value: PeriodPreset; label: string }[] = [
   { value: 'ytd',          label: 'Year to date' },
   { value: 'last_90_days', label: 'Past 90 days' },
   { value: 'last_30_days', label: 'Past 30 days' },
+  { value: 'custom',       label: 'Custom' },
 ]
 
 const ENTRY_TYPES: { value: EntryType; label: string }[] = [
@@ -62,6 +64,9 @@ function FilterLabel({ children }: { children: ReactNode }) {
 
 export default function FilterBar({ showDayType = false }: { showDayType?: boolean }) {
   const [state, setState] = useUrlState(DATA_WINDOW)
+  const minDate = toISODate(DATA_WINDOW.currentStart)
+  const maxDate = toISODate(DATA_WINDOW.currentEnd)
+  const currentEndLabel = formatDisplayDate(maxDate)
 
   return (
     <div className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5">
@@ -74,6 +79,39 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
             value={state.preset}
             onChange={(preset) => setState({ preset })}
           />
+          {state.preset === 'custom' && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="flex flex-col gap-1">
+                <FilterLabel>Start</FilterLabel>
+                <input
+                  type="date"
+                  min={minDate}
+                  max={maxDate}
+                  value={state.customStart ?? ''}
+                  onChange={(event) =>
+                    setState({ preset: 'custom', customStart: event.target.value })
+                  }
+                  className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <FilterLabel>End</FilterLabel>
+                <input
+                  type="date"
+                  min={minDate}
+                  max={maxDate}
+                  value={state.customEnd ?? ''}
+                  onChange={(event) =>
+                    setState({ preset: 'custom', customEnd: event.target.value })
+                  }
+                  className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+                />
+              </label>
+              <p className="text-xs leading-snug text-ink-600 sm:max-w-44">
+                2026 data available through {currentEndLabel}
+              </p>
+            </div>
+          )}
         </div>
 
         {showDayType && (
