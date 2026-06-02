@@ -1,5 +1,7 @@
 import type { FilterState, PeriodPreset } from './types'
 
+type BuiltInPeriodPreset = Exclude<PeriodPreset, 'custom'>
+
 export type DateRange = [Date, Date]
 
 export interface DataWindow {
@@ -43,7 +45,7 @@ function maxDate(a: Date, b: Date): Date {
   return a > b ? a : b
 }
 
-function periodFromCurrent(current: DateRange[]): ComparablePeriod {
+export function periodFromCurrent(current: DateRange[]): ComparablePeriod {
   return {
     current,
     prior: current.map(([start, end]) => [shift364(start), shift364(end)]),
@@ -58,7 +60,7 @@ function periodFromCurrent(current: DateRange[]): ComparablePeriod {
  */
 export function comparablePeriod(
   dataWindow: DataWindow,
-  preset: PeriodPreset,
+  preset: BuiltInPeriodPreset,
 ): ComparablePeriod {
   const start = startOfDay(dataWindow.currentStart)
   const end = startOfDay(dataWindow.currentEnd)
@@ -71,6 +73,23 @@ export function comparablePeriod(
     case 'last_90_days':
       return periodFromCurrent([[maxDate(start, addDays(end, -89)), end]])
   }
+}
+
+function formatDateRangeError(dataWindow: DataWindow): string {
+  return `Choose dates between ${formatDisplayDate(dataWindow.currentStart)} and ${formatDisplayDate(
+    dataWindow.currentEnd,
+  )}.`
+}
+
+function formatDisplayDate(date: Date): string {
+  return toISODate(date).replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_match, year, month, day) => {
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day))
+    return parsed.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  })
 }
 
 /** Format a Date as an ISO date string (YYYY-MM-DD) in local time. */
@@ -118,6 +137,21 @@ export function normalizeDateRange(
 }
 
 export function periodFromFilter(dataWindow: DataWindow, state: FilterState): PeriodValidation {
+  if (state.preset === 'custom') {
+    const result = normalizeDateRange(state.customStart, state.customEnd)
+    if (result.error) return { error: result.error }
+
+    const [startDate, endDate] = result.range!
+    const dataStart = startOfDay(dataWindow.currentStart)
+    const dataEnd = startOfDay(dataWindow.currentEnd)
+
+    if (startDate < dataStart || endDate > dataEnd) {
+      return { error: formatDateRangeError(dataWindow) }
+    }
+
+    return { period: periodFromCurrent([[startDate, endDate]]) }
+  }
+
   return { period: comparablePeriod(dataWindow, state.preset) }
 }
 

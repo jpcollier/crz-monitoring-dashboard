@@ -118,6 +118,43 @@ describe('periodFromFilter', () => {
     expect(rangesToISO(result.period!.current)).toEqual([['2026-01-01', '2026-05-24']])
     expect(rangesToISO(result.period!.prior)).toEqual([['2025-01-02', '2025-05-25']])
   })
+
+  it('maps a valid custom filter to a comparable period', () => {
+    const result = periodFromFilter(window('2026-01-01', '2026-05-24'), {
+      preset: 'custom',
+      customStart: '2026-05-01',
+      customEnd: '2026-05-07',
+      entryType: 'CRZ',
+      dayType: 'all',
+    })
+
+    expect(result.error).toBeUndefined()
+    expect(rangesToISO(result.period!.current)).toEqual([['2026-05-01', '2026-05-07']])
+    expect(rangesToISO(result.period!.prior)).toEqual([['2025-05-02', '2025-05-08']])
+  })
+
+  it('requires both custom filter boundaries', () => {
+    const result = periodFromFilter(window('2026-01-01', '2026-05-24'), {
+      preset: 'custom',
+      customStart: '2026-05-01',
+      entryType: 'CRZ',
+      dayType: 'all',
+    })
+
+    expect(result.error).toBe('Choose both a start and end date.')
+  })
+
+  it('rejects custom filters outside the data window', () => {
+    const result = periodFromFilter(window('2026-01-01', '2026-05-24'), {
+      preset: 'custom',
+      customStart: '2026-05-01',
+      customEnd: '2026-05-25',
+      entryType: 'CRZ',
+      dayType: 'all',
+    })
+
+    expect(result.error).toBe('Choose dates between January 1, 2026 and May 24, 2026.')
+  })
 })
 
 describe('parseUrlFilterState', () => {
