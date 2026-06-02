@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { buildDailyHoverRows, fmtAxisCount } from '../src/components/charts/chartHover'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { buildDailyHoverRows, fmtAxisCount, formatHoverReadout } from '../src/components/charts/chartHover'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('buildDailyHoverRows', () => {
   it('pairs 2026 and 2025 values by plot_date calendar day', () => {
@@ -16,6 +20,21 @@ describe('buildDailyHoverRows', () => {
         value2025: 75,
       },
     ])
+  })
+})
+
+describe('formatHoverReadout', () => {
+  it('uses the 2026-era plot_date for daily labels so UTC-midnight dates cannot shift to the prior day', () => {
+    vi.spyOn(Date.prototype, 'toLocaleDateString').mockReturnValue('Jan 4')
+
+    expect(
+      formatHoverReadout({
+        date: new Date('2026-01-05'),
+        plot_date: '2026-01-05',
+        value2026: 100,
+        value2025: 75,
+      }).timeLabel,
+    ).toBe('Jan 5')
   })
 })
 

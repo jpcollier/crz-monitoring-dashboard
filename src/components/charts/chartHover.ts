@@ -4,6 +4,8 @@ export const COLOR_2025 = '#9C988E' // ink-400 — prior year, warm neutral rece
 export const COLOR_2026 = '#C8102E' // signal-500 — current year, brand accent
 export const HOVER_RULE_COLOR = '#BFBAAB' // ink-300
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 /** Abbreviate large counts: 500000 → "500K", 1500000 → "1.5M". */
 export const fmtCount = (v: number): string => {
   const sign = v < 0 ? '-' : ''
@@ -117,14 +119,24 @@ function isDailyHoverRow(row: ChartHoverRow): row is DailyHoverRow {
   return 'date' in row
 }
 
+function formatDailyHoverDate(row: DailyHoverRow): string {
+  const plotDateMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(row.plot_date)
+  if (plotDateMatch) {
+    const monthIndex = Number(plotDateMatch[2]) - 1
+    const day = Number(plotDateMatch[3])
+    const month = MONTHS_SHORT[monthIndex]
+    if (month && Number.isFinite(day)) return `${month} ${day}`
+  }
+
+  return row.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
 export function formatHoverReadout(
   row: ChartHoverRow,
   options: { valueFormatter?: (value: number) => string } = {},
 ): HoverReadout {
   const { valueFormatter = fmtCount } = options
-  const timeLabel = isDailyHoverRow(row)
-    ? row.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : fmtHour(row.hour)
+  const timeLabel = isDailyHoverRow(row) ? formatDailyHoverDate(row) : fmtHour(row.hour)
 
   if (row.value2026 !== null && row.value2025 !== null) {
     const delta = row.value2026 - row.value2025
