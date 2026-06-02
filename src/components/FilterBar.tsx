@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useId } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
 import { toISODate } from '../lib/alignment'
 import { DATA_WINDOW, formatDisplayDate } from '../lib/metadata'
@@ -23,33 +23,61 @@ const DAY_TYPES: { value: DayType; label: string }[] = [
   { value: 'weekend', label: 'Weekend' },
 ]
 
-function SegmentedControl<T extends string>({
+type ChoiceOption<T extends string> = { value: T; label: string }
+
+function ResponsiveChoiceControl<T extends string>({
+  label,
   options,
   value,
   onChange,
 }: {
-  options: { value: T; label: string }[]
+  label: ReactNode
+  options: ChoiceOption<T>[]
   value: T
   onChange: (v: T) => void
 }) {
+  const generatedId = useId()
+  const selectId = `${generatedId}-select`
+
   return (
-    <div className="flex w-full overflow-x-auto border border-ink-900 sm:inline-flex sm:w-auto">
-      {options.map((opt, i) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={`min-h-9 flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer sm:flex-none sm:px-3.5 ${
-            i < options.length - 1 ? 'border-r border-ink-900' : ''
-          } ${
-            value === opt.value
-              ? 'bg-ink-900 text-paper-50'
-              : 'bg-transparent text-ink-900 hover:bg-paper-200'
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+    <div className="flex w-full min-w-0 flex-col gap-2 md:w-auto">
+      <label htmlFor={selectId} className="eyebrow md:hidden">
+        {label}
+      </label>
+      <select
+        id={selectId}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        className="min-h-9 w-full border border-ink-900 bg-white px-3 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-ink-900 md:hidden"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+
+      <fieldset className="hidden min-w-0 flex-col gap-2 md:flex">
+        <legend className="eyebrow">{label}</legend>
+        <div className="inline-flex w-fit flex-nowrap border border-ink-900">
+          {options.map((opt, i) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`min-h-9 flex-none whitespace-nowrap px-2.5 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer lg:px-3.5 ${
+                i < options.length - 1 ? 'border-r border-ink-900' : ''
+              } ${
+                value === opt.value
+                  ? 'bg-ink-900 text-paper-50'
+                  : 'bg-transparent text-ink-900 hover:bg-paper-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </fieldset>
     </div>
   )
 }
@@ -73,34 +101,28 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
       aria-label="Dashboard filters"
       className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5"
     >
-      <div className={showDayType ? 'grid gap-4 md:grid-cols-3' : 'grid gap-4 md:grid-cols-2'}>
-        <div className="flex min-w-0 flex-col gap-2">
-          <FilterLabel>Period</FilterLabel>
-          <SegmentedControl
-            options={PRESETS}
-            value={state.preset}
-            onChange={(preset) => setState({ preset })}
-          />
-        </div>
+      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end md:gap-x-8">
+        <ResponsiveChoiceControl
+          label="Period"
+          options={PRESETS}
+          value={state.preset}
+          onChange={(preset) => setState({ preset })}
+        />
 
-        <div className="flex min-w-0 flex-col gap-2">
-          <FilterLabel>Entry type</FilterLabel>
-          <SegmentedControl
-            options={ENTRY_TYPES}
-            value={state.entryType}
-            onChange={(entryType) => setState({ entryType })}
-          />
-        </div>
+        <ResponsiveChoiceControl
+          label="Entry type"
+          options={ENTRY_TYPES}
+          value={state.entryType}
+          onChange={(entryType) => setState({ entryType })}
+        />
 
         {showDayType && (
-          <div className="flex min-w-0 flex-col gap-2">
-            <FilterLabel>Day type</FilterLabel>
-            <SegmentedControl
-              options={DAY_TYPES}
-              value={state.dayType}
-              onChange={(dayType) => setState({ dayType })}
-            />
-          </div>
+          <ResponsiveChoiceControl
+            label="Day type"
+            options={DAY_TYPES}
+            value={state.dayType}
+            onChange={(dayType) => setState({ dayType })}
+          />
         )}
       </div>
 
