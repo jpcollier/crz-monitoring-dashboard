@@ -19,13 +19,15 @@ import {
 
 /**
  * A systemwide summary produced by querySystemwideSummary.
- * current_entries / prior_entries are totals over the comparable window;
- * pct_change is (current - prior) / prior * 100, null when no prior data.
+ * current_entries / prior_entries are totals over dates present in both years;
+ * pct_change is (current - prior) / prior * 100, null when no prior data,
+ * and current_days is the denominator for comparable-period daily averages.
  */
 export interface SystemwideSummary {
   current_entries: number
   prior_entries: number
   pct_change: number | null
+  current_days: number
 }
 
 /**
