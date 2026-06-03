@@ -1,37 +1,44 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useId } from 'react'
 import { useUrlState } from '../hooks/useUrlState'
-import { toISODate } from '../lib/alignment'
-import { DATA_WINDOW, formatDisplayDate } from '../lib/metadata'
+import { presetDateRange, toISODate } from '../lib/alignment'
+import { DATA_WINDOW } from '../lib/metadata'
 import type { DayType, EntryType, PeriodPreset } from '../lib/types'
 
-const PRESETS: { value: PeriodPreset; label: string }[] = [
-  { value: 'ytd',          label: 'Year to date' },
-  { value: 'last_90_days', label: 'Past 90 days' },
-  { value: 'last_30_days', label: 'Past 30 days' },
+type ChoiceOption<T extends string> = { value: T; label: string; shortLabel?: string }
+
+const PRESETS: ChoiceOption<PeriodPreset>[] = [
+  { value: 'ytd',          label: 'Year to date', shortLabel: 'YTD' },
+  { value: 'last_90_days', label: 'Past 90 days', shortLabel: '90 days' },
+  { value: 'last_30_days', label: 'Past 30 days', shortLabel: '30 days' },
   { value: 'custom',       label: 'Custom' },
 ]
 
-const ENTRY_TYPES: { value: EntryType; label: string }[] = [
+const ENTRY_TYPES: ChoiceOption<EntryType>[] = [
   { value: 'CRZ',      label: 'CRZ' },
   { value: 'Excluded', label: 'Excluded' },
   { value: 'Combined', label: 'Combined' },
 ]
 
-const DAY_TYPES: { value: DayType; label: string }[] = [
+const DAY_TYPES: ChoiceOption<DayType>[] = [
   { value: 'all',     label: 'All days' },
   { value: 'weekday', label: 'Weekday' },
   { value: 'weekend', label: 'Weekend' },
 ]
 
-function SegmentedControl<T extends string>({
+function ResponsiveChoiceControl<T extends string>({
+  label,
   options,
   value,
   onChange,
 }: {
-  options: { value: T; label: string }[]
+  label: string
+  options: ChoiceOption<T>[]
   value: T
   onChange: (v: T) => void
 }) {
+  const generatedId = useId()
+  const selectId = `${generatedId}-select`
+
   return (
     <div className="flex w-full flex-wrap overflow-visible border border-ink-900 sm:inline-flex sm:w-auto sm:flex-nowrap">
       {options.map((opt, i) => (
@@ -66,7 +73,25 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
   const [state, setState] = useUrlState(DATA_WINDOW)
   const minDate = toISODate(DATA_WINDOW.currentStart)
   const maxDate = toISODate(DATA_WINDOW.currentEnd)
-  const currentEndLabel = formatDisplayDate(maxDate)
+
+  const primaryGridClass = showDayType
+    ? 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-[minmax(16rem,1.4fr)_minmax(12rem,1fr)_minmax(12rem,1fr)]'
+    : 'grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-[minmax(16rem,1.4fr)_minmax(12rem,1fr)]'
+
+  const handlePeriodChange = (preset: PeriodPreset) => {
+    if (preset === 'custom' && state.preset !== 'custom') {
+      const [customStart, customEnd] = presetDateRange(DATA_WINDOW, state.preset)
+
+      setState({
+        preset,
+        customStart: toISODate(customStart),
+        customEnd: toISODate(customEnd),
+      })
+      return
+    }
+
+    setState({ preset })
+  }
 
   return (
     <section className="border border-ink-900 bg-white px-4 py-4 sm:px-6 sm:py-5">
