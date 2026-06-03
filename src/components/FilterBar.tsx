@@ -40,23 +40,56 @@ function ResponsiveChoiceControl<T extends string>({
   const selectId = `${generatedId}-select`
 
   return (
-    <div className="flex w-full flex-wrap overflow-visible border border-ink-900 sm:inline-flex sm:w-auto sm:flex-nowrap">
-      {options.map((opt, i) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={`min-h-10 flex-1 basis-1/2 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer sm:flex-none sm:basis-auto sm:px-3.5 ${
-            i < options.length - 1 ? 'border-r border-ink-900' : ''
-          } ${
-            value === opt.value
-              ? 'bg-ink-900 text-paper-50'
-              : 'bg-transparent text-ink-900 hover:bg-paper-200'
-          }`}
-        >
-          {opt.label}
-        </button>
-      ))}
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-2">
+      <label htmlFor={selectId} className="eyebrow md:hidden">
+        {label}
+      </label>
+      <select
+        id={selectId}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        className="min-h-9 w-full min-w-0 max-w-full border border-ink-900 bg-white px-3 py-2 text-sm font-semibold uppercase tracking-[0.12em] text-ink-900 md:hidden"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+
+      <fieldset className="hidden min-w-0 max-w-full flex-col gap-2 md:flex">
+        <legend className="eyebrow">{label}</legend>
+        <div className="grid w-full min-w-0 max-w-full grid-flow-col auto-cols-fr border border-ink-900">
+          {options.map((opt, i) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              aria-label={`${label}: ${opt.label}`}
+              className={`min-h-9 min-w-0 overflow-hidden whitespace-normal px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors cursor-pointer lg:px-2.5 lg:text-[11px] ${
+                i < options.length - 1 ? 'border-r border-ink-900' : ''
+              } ${
+                value === opt.value
+                  ? 'bg-ink-900 text-paper-50'
+                  : 'bg-transparent text-ink-900 hover:bg-paper-200'
+              }`}
+            >
+              {opt.shortLabel ? (
+                <>
+                  <span className="lg:hidden" aria-hidden="true">
+                    {opt.shortLabel}
+                  </span>
+                  <span className="hidden lg:inline">
+                    {opt.label}
+                  </span>
+                </>
+              ) : (
+                opt.label
+              )}
+            </button>
+          ))}
+        </div>
+      </fieldset>
     </div>
   )
 }
@@ -94,42 +127,39 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
   }
 
   return (
-    <section className="border border-ink-900 bg-white px-4 py-4 sm:px-6 sm:py-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[auto_auto_auto] xl:items-end">
-        <div className="flex min-w-0 flex-col gap-2">
-          <FilterLabel>Period</FilterLabel>
-          <SegmentedControl
-            options={PRESETS}
-            value={state.preset}
-            onChange={(preset) => setState({ preset })}
-          />
-        </div>
+    <section
+      aria-label="Dashboard filters"
+      className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5"
+    >
+      <div className={`${primaryGridClass} min-w-0 max-w-full items-end`}>
+        <ResponsiveChoiceControl
+          label="Period"
+          options={PRESETS}
+          value={state.preset}
+          onChange={handlePeriodChange}
+        />
 
         {showDayType && (
-          <div className="flex min-w-0 flex-col gap-2">
-            <FilterLabel>Day type</FilterLabel>
-            <SegmentedControl
-              options={DAY_TYPES}
-              value={state.dayType}
-              onChange={(dayType) => setState({ dayType })}
-            />
-          </div>
+          <ResponsiveChoiceControl
+            label="Day type"
+            options={DAY_TYPES}
+            value={state.dayType}
+            onChange={(dayType) => setState({ dayType })}
+          />
         )}
 
-        <div className="flex min-w-0 flex-col gap-2">
-          <FilterLabel>Entry type</FilterLabel>
-          <SegmentedControl
-            options={ENTRY_TYPES}
-            value={state.entryType}
-            onChange={(entryType) => setState({ entryType })}
-          />
-        </div>
+        <ResponsiveChoiceControl
+          label="Entry type"
+          options={ENTRY_TYPES}
+          value={state.entryType}
+          onChange={(entryType) => setState({ entryType })}
+        />
       </div>
 
       {state.preset === 'custom' && (
-        <div className="mt-4 border border-ink-200 bg-paper-100 p-3 sm:p-4">
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,1fr)] sm:items-end">
-            <label className="flex min-w-0 flex-col gap-2">
+        <div className="mt-4 border-t border-ink-200 pt-4">
+          <div className="grid min-w-0 max-w-full gap-3 sm:grid-cols-2 lg:max-w-[32rem]">
+            <label className="flex min-w-0 max-w-full flex-col gap-1">
               <FilterLabel>Start</FilterLabel>
               <input
                 type="date"
@@ -139,10 +169,10 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 onChange={(event) =>
                   setState({ preset: 'custom', customStart: event.target.value })
                 }
-                className="min-h-10 border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+                className="min-w-0 w-full max-w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular"
               />
             </label>
-            <label className="flex min-w-0 flex-col gap-2">
+            <label className="flex min-w-0 max-w-full flex-col gap-1">
               <FilterLabel>End</FilterLabel>
               <input
                 type="date"
@@ -152,12 +182,9 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
                 onChange={(event) =>
                   setState({ preset: 'custom', customEnd: event.target.value })
                 }
-                className="min-h-10 border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+                className="min-w-0 w-full max-w-full border border-ink-900 bg-white px-3 py-2 text-sm tabular"
               />
             </label>
-            <p className="text-xs leading-snug text-ink-600 sm:pb-2">
-              2026 data available through {currentEndLabel}
-            </p>
           </div>
         </div>
       )}
