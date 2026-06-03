@@ -33,13 +33,13 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="flex w-full overflow-x-auto border border-ink-900 sm:inline-flex sm:w-auto">
+    <div className="flex w-full flex-wrap overflow-visible border border-ink-900 sm:inline-flex sm:w-auto sm:flex-nowrap">
       {options.map((opt, i) => (
         <button
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          className={`min-h-9 flex-1 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer sm:flex-none sm:px-3.5 ${
+          className={`min-h-10 flex-1 basis-1/2 whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors cursor-pointer sm:flex-none sm:basis-auto sm:px-3.5 ${
             i < options.length - 1 ? 'border-r border-ink-900' : ''
           } ${
             value === opt.value
@@ -69,9 +69,8 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
   const currentEndLabel = formatDisplayDate(maxDate)
 
   return (
-    <div className="bg-white border border-ink-900 px-4 py-4 sm:px-6 sm:py-5">
-      <div className="grid gap-4 lg:flex lg:flex-wrap lg:items-center lg:gap-8">
-
+    <section className="border border-ink-900 bg-white px-4 py-4 sm:px-6 sm:py-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[auto_auto_auto] xl:items-end">
         <div className="flex min-w-0 flex-col gap-2">
           <FilterLabel>Period</FilterLabel>
           <SegmentedControl
@@ -79,56 +78,18 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
             value={state.preset}
             onChange={(preset) => setState({ preset })}
           />
-          {state.preset === 'custom' && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-              <label className="flex flex-col gap-1">
-                <FilterLabel>Start</FilterLabel>
-                <input
-                  type="date"
-                  min={minDate}
-                  max={maxDate}
-                  value={state.customStart ?? ''}
-                  onChange={(event) =>
-                    setState({ preset: 'custom', customStart: event.target.value })
-                  }
-                  className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <FilterLabel>End</FilterLabel>
-                <input
-                  type="date"
-                  min={minDate}
-                  max={maxDate}
-                  value={state.customEnd ?? ''}
-                  onChange={(event) =>
-                    setState({ preset: 'custom', customEnd: event.target.value })
-                  }
-                  className="border border-ink-900 bg-white px-3 py-2 text-sm tabular"
-                />
-              </label>
-              <p className="text-xs leading-snug text-ink-600 sm:max-w-44">
-                2026 data available through {currentEndLabel}
-              </p>
-            </div>
-          )}
         </div>
 
         {showDayType && (
-          <>
-            <div className="hidden self-stretch w-px bg-ink-200 lg:block" />
-            <div className="flex min-w-0 flex-col gap-2">
-              <FilterLabel>Day type</FilterLabel>
-              <SegmentedControl
-                options={DAY_TYPES}
-                value={state.dayType}
-                onChange={(dayType) => setState({ dayType })}
-              />
-            </div>
-          </>
+          <div className="flex min-w-0 flex-col gap-2">
+            <FilterLabel>Day type</FilterLabel>
+            <SegmentedControl
+              options={DAY_TYPES}
+              value={state.dayType}
+              onChange={(dayType) => setState({ dayType })}
+            />
+          </div>
         )}
-
-        <div className="hidden self-stretch w-px bg-ink-200 lg:block" />
 
         <div className="flex min-w-0 flex-col gap-2">
           <FilterLabel>Entry type</FilterLabel>
@@ -138,8 +99,43 @@ export default function FilterBar({ showDayType = false }: { showDayType?: boole
             onChange={(entryType) => setState({ entryType })}
           />
         </div>
-
       </div>
-    </div>
+
+      {state.preset === 'custom' && (
+        <div className="mt-4 border border-ink-200 bg-paper-100 p-3 sm:p-4">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,1fr)] sm:items-end">
+            <label className="flex min-w-0 flex-col gap-2">
+              <FilterLabel>Start</FilterLabel>
+              <input
+                type="date"
+                min={minDate}
+                max={maxDate}
+                value={state.customStart ?? ''}
+                onChange={(event) =>
+                  setState({ preset: 'custom', customStart: event.target.value })
+                }
+                className="min-h-10 border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+              />
+            </label>
+            <label className="flex min-w-0 flex-col gap-2">
+              <FilterLabel>End</FilterLabel>
+              <input
+                type="date"
+                min={minDate}
+                max={maxDate}
+                value={state.customEnd ?? ''}
+                onChange={(event) =>
+                  setState({ preset: 'custom', customEnd: event.target.value })
+                }
+                className="min-h-10 border border-ink-900 bg-white px-3 py-2 text-sm tabular"
+              />
+            </label>
+            <p className="text-xs leading-snug text-ink-600 sm:pb-2">
+              2026 data available through {currentEndLabel}
+            </p>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }
