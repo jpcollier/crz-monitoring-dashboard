@@ -3,6 +3,7 @@ import { parseUrlFilterState, serializeUrlFilterState } from '../src/hooks/useUr
 import {
   comparablePeriod,
   normalizeDateRange,
+  presetDateRange,
   parseISODateOnly,
   periodFromFilter,
   shift364,
@@ -65,6 +66,14 @@ describe('comparablePeriod', () => {
     expect(rangesToISO(current)).toEqual([['2026-01-01', '2026-01-03']])
     expect(rangesToISO(prior)).toEqual([['2025-01-02', '2025-01-04']])
     expect(prior[0]![0] < d('2025-01-05')).toBe(true)
+  })
+
+})
+
+describe('presetDateRange', () => {
+  it('returns the current date window for a built-in preset', () => {
+    const range = presetDateRange(window('2026-01-01', '2026-05-24'), 'last_90_days')
+    expect(range.map(toISODate)).toEqual(['2026-02-24', '2026-05-24'])
   })
 
 })
