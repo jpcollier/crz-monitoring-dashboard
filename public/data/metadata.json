@@ -1,16 +1,16 @@
 {
-  "last_updated": "2026-06-05T15:30:00.477911+00:00",
-  "source_row_count": 5298048,
-  "source_valid_row_count": 5298048,
+  "last_updated": "2026-06-12T14:11:49.954210+00:00",
+  "source_row_count": 5370624,
+  "source_valid_row_count": 5370624,
   "source_rejected_row_count": 0,
-  "daily_row_count": 73584,
-  "hourly_row_count": 1766016,
+  "daily_row_count": 74592,
+  "hourly_row_count": 1790208,
   "current_window_start": "2026-01-01",
-  "current_window_end": "2026-05-30",
+  "current_window_end": "2026-06-06",
   "schema_version": 1,
-  "data_as_of": "2026-05-30",
-  "source_data_as_of": "2026-05-30",
-  "comparable_period_end": "2026-05-30",
-  "rows_daily": 73584,
-  "rows_hourly": 1766016
+  "data_as_of": "2026-06-06",
+  "source_data_as_of": "2026-06-06",
+  "comparable_period_end": "2026-06-06",
+  "rows_daily": 74592,
+  "rows_hourly": 1790208
 }
